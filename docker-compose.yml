@@ -1,0 +1,53 @@
+services:
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: kardeva_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: kardeva_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer
+    container_name: kardeva_adminer
+    restart: always
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: kardeva_frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: kardeva_backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      - postgres-db
+    environment:
+      - DB_USER=${DB_USER:-kardeva_admin}
+      - DB_PASSWORD=${DB_PASS:-rootless123}
+      - DB_NAME=${DB_NAME:-kardeva_db}
+      - DB_HOST=postgres-db
+      - DB_PORT=5432
+
+volumes:
+  postgres_data:

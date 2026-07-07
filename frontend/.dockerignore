@@ -1,0 +1,14 @@
+# Ignore local dependnecies 
+node_modules
+npm-debug.log
+
+# Ignore Git files
+.git
+.gitignore
+
+# Ignore builds (in case they are generated locally)
+dist
+build
+
+# Ignore environment variables (for security, they are not copied in the image)
+.env

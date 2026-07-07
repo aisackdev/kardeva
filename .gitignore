@@ -1,0 +1,20 @@
+# Dependencias de Node (Cubre tanto frontend como backend)
+node_modules/
+npm-debug.log
+
+# Archivos de entorno (¡NUNCA SE SUBEN A GITHUB!)
+.env
+.env.*
+
+# Carpetas de compilación
+dist/
+build/
+
+# Bases de datos locales
+*.sqlite
+postgres_data/
+
+# Archivos de Sistema Operativo y Editores
+.DS_Store
+.vscode/
+.idea/
