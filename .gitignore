@@ -5,6 +5,7 @@ npm-debug.log
 # Archivos de entorno (¡NUNCA SE SUBEN A GITHUB!)
 .env
 .env.*
+!.env.example
 
 # Carpetas de compilación
 dist/
