@@ -13,3 +13,8 @@ export interface Transaction {
   amount: string;
   is_third_party: boolean;
 }
+
+export interface ChartData {
+  day: string;
+  total: number;
+}

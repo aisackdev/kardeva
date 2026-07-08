@@ -50,6 +50,7 @@ backend/
       transaction.routes.ts
     db.ts
     index.ts
+    sse.ts
   .dockerignore
   Dockerfile.dev
   package.json
@@ -65,6 +66,7 @@ frontend/
     index.css
     main.tsx
   .dockerignore
+  .env.example
   .gitignore
   Dockerfile.dev
   eslint.config.js
@@ -75,12 +77,36 @@ frontend/
   tsconfig.json
   tsconfig.node.json
   vite.config.ts
+.env.example
 .gitignore
 docker-compose.yml
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="backend/src/sse.ts">
+import type { Response } from "express";
+
+// Array to store all connected users (browsers)
+let clients: Response[] = [];
+
+export const addClient = (res: Response) => {
+  clients.push(res);
+};
+
+export const removeClient = (res: Response) => {
+  clients = clients.filter((client) => client !== res);
+};
+
+// Function to send a message to everyone
+export const broadcast = (event: string, data: any) => {
+  clients.forEach((client) => {
+    client.write(`event: ${event}\n`);
+    client.write(`data: ${JSON.stringify(data)}\n\n`);
+  });
+};
+</file>
 
 <file path="backend/src/controllers/system.controller.ts">
 import type { Request, Response } from "express";
@@ -110,6 +136,7 @@ export const getDatabaseStatus = async (req: Request, res: Response) => {
 <file path="backend/src/controllers/transaction.controller.ts">
 import type { Request, Response } from "express";
 import { pool } from "../db.js";
+import { broadcast } from "../sse.js";
 
 export const createTransaction = async (req: Request, res: Response) => {
   try {
@@ -146,6 +173,9 @@ export const createTransaction = async (req: Request, res: Response) => {
 
     // 3. We execute the query
     const result = await pool.query(insertQuery, values);
+    const newTransaction = result.rows[0];
+
+    broadcast("new_transaction", newTransaction);
 
     // 4. We send the created transaction back to the client with a 201 Created status
     res.status(201).json({
@@ -205,6 +235,34 @@ export const getSummary = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
+
+export const getChartData = async (req: Request, res: Response) => {
+  try {
+    // We use TO_CHAR to format the date as 'YYYY-MM-DD' and group by it
+    const chartQuery = `
+      SELECT 
+        TO_CHAR(date, 'YYYY-MM-DD') as day,
+        SUM(amount) as total
+      FROM transactions
+      GROUP BY TO_CHAR(date, 'YYYY-MM-DD')
+      ORDER BY day ASC
+      LIMIT 7;
+    `;
+
+    const result = await pool.query(chartQuery);
+
+    // Parse the total from string to number (Postgres SUM returns a string)
+    const formattedData = result.rows.map((row) => ({
+      day: row.day,
+      total: parseFloat(row.total),
+    }));
+
+    res.status(200).json({ chartData: formattedData });
+  } catch (error) {
+    console.error("Error fetching chart data:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
 </file>
 
 <file path="backend/src/routes/system.routes.ts">
@@ -229,13 +287,16 @@ import {
   createTransaction,
   getTransactions,
   getSummary,
+  getChartData,
 } from "../controllers/transaction.controller.js";
 
 const router = Router();
 
+router.get("/summary", getSummary);
+router.get("/chart", getChartData);
+
 router.post("/", createTransaction);
 router.get("/", getTransactions);
-router.get("/summary", getSummary);
 
 export default router;
 </file>
@@ -253,7 +314,7 @@ export const pool = new Pool({
   port: parseInt(process.env.DB_PORT || "5432", 10),
 });
 
-const initDB = async () => {
+export const initDB = async () => {
   // 1. WARNING: We drop the tables to recreate them with the new schema (Only for development!)
   const dropOldTablesQuery = `
     DROP TABLE IF EXISTS transactions CASCADE;
@@ -307,8 +368,6 @@ pool.on("connect", () => {
 pool.on("error", (err) => {
   console.error("❌ Unexpected error on the database client", err);
 });
-
-initDB();
 </file>
 
 <file path="backend/src/index.ts">
@@ -317,6 +376,8 @@ import express from "express";
 import cors from "cors";
 import systemRoutes from "./routes/system.routes.js";
 import transactionRoutes from "./routes/transaction.routes.js";
+import { initDB } from "./db.js";
+import { addClient, removeClient } from "./sse.js";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -332,6 +393,25 @@ app.use(express.json());
 // Routes
 app.use("/", systemRoutes);
 app.use("/api/transactions", transactionRoutes);
+
+app.get("/api/stream", (req, res) => {
+  // Required headers for SSE
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders(); // Establish the connection immediately
+
+  addClient(res); // Add user to our list
+  console.log("Client connected to SSE stream");
+
+  // If user closes the browser, remove them from the list
+  req.on("close", () => {
+    removeClient(res);
+    console.log("Client disconnected");
+  });
+});
+
+await initDB();
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
@@ -494,21 +574,47 @@ export interface Transaction {
   amount: string;
   is_third_party: boolean;
 }
+
+export interface ChartData {
+  day: string;
+  total: number;
+}
 </file>
 
 <file path="frontend/src/App.tsx">
 import { useEffect, useState } from "react";
-import type { DbStatusResponse, Transaction } from "./types";
+import type { DbStatusResponse, Transaction, ChartData } from "./types";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 function App() {
   // Here will save the message from the backend
   const [message, setMessage] = useState<string>("Loading...");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [totalExpenses, setTotalExpenses] = useState<number>(0);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
 
   // Hardcoded monthly income for now (e.g. 1,000,000 colones)
   const monthlyIncome = 1000000;
   const availableBalance = monthlyIncome - totalExpenses;
+
+  // NEW: Function to load chart data
+  const fetchChartData = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions/chart`)
+      .then((res) => res.json())
+      .then((data) => {
+        setChartData(data.chartData);
+      })
+      .catch((error) => console.error("Error fetching chart data:", error));
+  };
 
   // Function to load the transactions from the backend
   const fetchTransactions = () => {
@@ -516,18 +622,22 @@ function App() {
     fetch(`${apiUrl}/api/transactions`)
       .then((res) => res.json())
       .then((data) => {
-        setTransactions(data.transactions);
+        if (data.transactions) {
+          setTransactions(data.transactions);
+        }
       })
       .catch((error) => console.error("Error fetching transactions:", error));
   };
 
-  // NEW: Function to load the summary
+  // Function to load the summary
   const fetchSummary = () => {
     const apiUrl = import.meta.env.VITE_API_URL;
     fetch(`${apiUrl}/api/transactions/summary`)
       .then((res) => res.json())
       .then((data) => {
-        setTotalExpenses(data.totalExpenses);
+        if (data.totalExpenses !== undefined) {
+          setTotalExpenses(data.totalExpenses);
+        }
       })
       .catch((error) => console.error("Error fetching summary:", error));
   };
@@ -551,6 +661,7 @@ function App() {
 
     fetchTransactions();
     fetchSummary();
+    fetchChartData();
   }, []);
 
   // Button test to simulate Apps Script from Google
@@ -577,6 +688,14 @@ function App() {
     }).then(() => {
       fetchTransactions(); // Refresh the list after adding!
       fetchSummary(); // Refresh the summary after adding a new transaction!
+      fetchChartData(); // Refresh chart after new transaction!
+    });
+  };
+
+  // Helper function to format currency without decimals
+  const formatCurrency = (amount: number) => {
+    return amount.toLocaleString("es-CR", {
+      maximumFractionDigits: 0,
     });
   };
 
@@ -612,7 +731,7 @@ function App() {
               Monthly Income
             </span>
             <span className="text-2xl font-extrabold text-green-600">
-              + ₡{monthlyIncome.toLocaleString("es-CR")}
+              + ₡{formatCurrency(monthlyIncome)}
             </span>
           </div>
 
@@ -622,7 +741,7 @@ function App() {
               Total Expenses
             </span>
             <span className="text-2xl font-extrabold text-red-600">
-              - ₡{totalExpenses.toLocaleString("es-CR")}
+              - ₡{formatCurrency(totalExpenses)}
             </span>
           </div>
 
@@ -632,8 +751,46 @@ function App() {
               Available Balance
             </span>
             <span className="text-2xl font-extrabold text-white">
-              = ₡{availableBalance.toLocaleString("es-CR")}
+              = ₡{formatCurrency(availableBalance)}
             </span>
+          </div>
+        </div>
+
+        {/* --- Chart Section */}
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 mb-6">
+          <h2 className="text-lg font-bold text-gray-700 mb-4">
+            Expenses Last 7 Days
+          </h2>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="#f3f4f6"
+                />
+                <XAxis
+                  dataKey="day"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#9ca3af", fontSize: 12 }}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#9ca3af", fontSize: 12 }}
+                  tickFormatter={(value) => `₡${value / 1000}k`} // Format to show 1k, 2k, etc.
+                />
+                <Tooltip
+                  cursor={{ fill: "#f3f4f6" }}
+                  formatter={(value: any) => [
+                    `₡${formatCurrency(Number(value))}`,
+                    "Total",
+                  ]}
+                />
+                <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
@@ -666,7 +823,7 @@ function App() {
                   </div>
                   <div className="flex flex-col items-end">
                     <span className="font-bold text-red-600">
-                      - ₡{Number(tx.amount).toLocaleString("es-CR")}
+                      - ₡{formatCurrency(Number(tx.amount))}
                     </span>
                     <span className="text-[10px] text-gray-400 mt-1 font-mono">
                       {tx.auth_code}
@@ -719,31 +876,8 @@ build
 .env
 </file>
 
-<file path="frontend/.gitignore">
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+<file path="frontend/.env.example">
+VITE_API_URL=http://localhost:3000
 </file>
 
 <file path="frontend/Dockerfile.dev">
@@ -816,7 +950,8 @@ export default defineConfig([
   "dependencies": {
     "@tailwindcss/vite": "^4.3.2",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "recharts": "^3.9.2"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
@@ -1000,27 +1135,11 @@ export default defineConfig({
 });
 </file>
 
-<file path=".gitignore">
-# Dependencias de Node (Cubre tanto frontend como backend)
-node_modules/
-npm-debug.log
-
-# Archivos de entorno (¡NUNCA SE SUBEN A GITHUB!)
-.env
-.env.*
-
-# Carpetas de compilación
-dist/
-build/
-
-# Bases de datos locales
-*.sqlite
-postgres_data/
-
-# Archivos de Sistema Operativo y Editores
-.DS_Store
-.vscode/
-.idea/
+<file path=".env.example">
+# Database Configuration (Docker local defaults)
+DB_USER=kardeva_admin
+DB_PASS=rootless123
+DB_NAME=kardeva_db
 </file>
 
 <file path="docker-compose.yml">
@@ -1077,6 +1196,60 @@ services:
 
 volumes:
   postgres_data:
+</file>
+
+<file path="frontend/.gitignore">
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.env.*
+!.env.example
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+</file>
+
+<file path=".gitignore">
+# Dependencias de Node (Cubre tanto frontend como backend)
+node_modules/
+npm-debug.log
+
+# Archivos de entorno (¡NUNCA SE SUBEN A GITHUB!)
+.env
+.env.*
+!.env.example
+
+# Carpetas de compilación
+dist/
+build/
+
+# Bases de datos locales
+*.sqlite
+postgres_data/
+
+# Archivos de Sistema Operativo y Editores
+.DS_Store
+.vscode/
+.idea/
 </file>
 
 </files>

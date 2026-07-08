@@ -1,15 +1,36 @@
 import { useEffect, useState } from "react";
-import type { DbStatusResponse, Transaction } from "./types";
+import type { DbStatusResponse, Transaction, ChartData } from "./types";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 function App() {
   // Here will save the message from the backend
   const [message, setMessage] = useState<string>("Loading...");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [totalExpenses, setTotalExpenses] = useState<number>(0);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
 
   // Hardcoded monthly income for now (e.g. 1,000,000 colones)
   const monthlyIncome = 1000000;
   const availableBalance = monthlyIncome - totalExpenses;
+
+  // NEW: Function to load chart data
+  const fetchChartData = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions/chart`)
+      .then((res) => res.json())
+      .then((data) => {
+        setChartData(data.chartData);
+      })
+      .catch((error) => console.error("Error fetching chart data:", error));
+  };
 
   // Function to load the transactions from the backend
   const fetchTransactions = () => {
@@ -17,18 +38,22 @@ function App() {
     fetch(`${apiUrl}/api/transactions`)
       .then((res) => res.json())
       .then((data) => {
-        setTransactions(data.transactions);
+        if (data.transactions) {
+          setTransactions(data.transactions);
+        }
       })
       .catch((error) => console.error("Error fetching transactions:", error));
   };
 
-  // NEW: Function to load the summary
+  // Function to load the summary
   const fetchSummary = () => {
     const apiUrl = import.meta.env.VITE_API_URL;
     fetch(`${apiUrl}/api/transactions/summary`)
       .then((res) => res.json())
       .then((data) => {
-        setTotalExpenses(data.totalExpenses);
+        if (data.totalExpenses !== undefined) {
+          setTotalExpenses(data.totalExpenses);
+        }
       })
       .catch((error) => console.error("Error fetching summary:", error));
   };
@@ -52,6 +77,25 @@ function App() {
 
     fetchTransactions();
     fetchSummary();
+    fetchChartData();
+
+    // Connect to the SSE Stream (Turn on the radio)
+    const eventSource = new EventSource(`${apiUrl}/api/stream`);
+
+    // Listen for our custom 'new_transaction' event
+    eventSource.addEventListener("new_transaction", (event) => {
+      console.log("New transaction received from server!", event.data);
+
+      // We received a whisper, now we re-fetch all data to update the UI automatically
+      fetchTransactions();
+      fetchSummary();
+      fetchChartData();
+    });
+
+    // Cleanup function - Close the connection if the user leaves the page
+    return () => {
+      eventSource.close();
+    };
   }, []);
 
   // Button test to simulate Apps Script from Google
@@ -78,6 +122,14 @@ function App() {
     }).then(() => {
       fetchTransactions(); // Refresh the list after adding!
       fetchSummary(); // Refresh the summary after adding a new transaction!
+      fetchChartData(); // Refresh chart after new transaction!
+    });
+  };
+
+  // Helper function to format currency without decimals
+  const formatCurrency = (amount: number) => {
+    return amount.toLocaleString("es-CR", {
+      maximumFractionDigits: 0,
     });
   };
 
@@ -113,7 +165,7 @@ function App() {
               Monthly Income
             </span>
             <span className="text-2xl font-extrabold text-green-600">
-              + ₡{monthlyIncome.toLocaleString("es-CR")}
+              + ₡{formatCurrency(monthlyIncome)}
             </span>
           </div>
 
@@ -123,7 +175,7 @@ function App() {
               Total Expenses
             </span>
             <span className="text-2xl font-extrabold text-red-600">
-              - ₡{totalExpenses.toLocaleString("es-CR")}
+              - ₡{formatCurrency(totalExpenses)}
             </span>
           </div>
 
@@ -133,8 +185,46 @@ function App() {
               Available Balance
             </span>
             <span className="text-2xl font-extrabold text-white">
-              = ₡{availableBalance.toLocaleString("es-CR")}
+              = ₡{formatCurrency(availableBalance)}
             </span>
+          </div>
+        </div>
+
+        {/* --- Chart Section */}
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 mb-6">
+          <h2 className="text-lg font-bold text-gray-700 mb-4">
+            Expenses Last 7 Days
+          </h2>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="#f3f4f6"
+                />
+                <XAxis
+                  dataKey="day"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#9ca3af", fontSize: 12 }}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#9ca3af", fontSize: 12 }}
+                  tickFormatter={(value) => `₡${value / 1000}k`} // Format to show 1k, 2k, etc.
+                />
+                <Tooltip
+                  cursor={{ fill: "#f3f4f6" }}
+                  formatter={(value: any) => [
+                    `₡${formatCurrency(Number(value))}`,
+                    "Total",
+                  ]}
+                />
+                <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
@@ -167,7 +257,7 @@ function App() {
                   </div>
                   <div className="flex flex-col items-end">
                     <span className="font-bold text-red-600">
-                      - ₡{Number(tx.amount).toLocaleString("es-CR")}
+                      - ₡{formatCurrency(Number(tx.amount))}
                     </span>
                     <span className="text-[10px] text-gray-400 mt-1 font-mono">
                       {tx.auth_code}

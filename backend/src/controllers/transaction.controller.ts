@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { pool } from "../db.js";
+import { broadcast } from "../sse.js";
 
 export const createTransaction = async (req: Request, res: Response) => {
   try {
@@ -36,6 +37,9 @@ export const createTransaction = async (req: Request, res: Response) => {
 
     // 3. We execute the query
     const result = await pool.query(insertQuery, values);
+    const newTransaction = result.rows[0];
+
+    broadcast("new_transaction", newTransaction);
 
     // 4. We send the created transaction back to the client with a 201 Created status
     res.status(201).json({
@@ -92,6 +96,34 @@ export const getSummary = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error fetching summary:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getChartData = async (req: Request, res: Response) => {
+  try {
+    // We use TO_CHAR to format the date as 'YYYY-MM-DD' and group by it
+    const chartQuery = `
+      SELECT 
+        TO_CHAR(date, 'YYYY-MM-DD') as day,
+        SUM(amount) as total
+      FROM transactions
+      GROUP BY TO_CHAR(date, 'YYYY-MM-DD')
+      ORDER BY day ASC
+      LIMIT 7;
+    `;
+
+    const result = await pool.query(chartQuery);
+
+    // Parse the total from string to number (Postgres SUM returns a string)
+    const formattedData = result.rows.map((row) => ({
+      day: row.day,
+      total: parseFloat(row.total),
+    }));
+
+    res.status(200).json({ chartData: formattedData });
+  } catch (error) {
+    console.error("Error fetching chart data:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

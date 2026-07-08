@@ -10,7 +10,7 @@ export const pool = new Pool({
   port: parseInt(process.env.DB_PORT || "5432", 10),
 });
 
-const initDB = async () => {
+export const initDB = async () => {
   // 1. WARNING: We drop the tables to recreate them with the new schema (Only for development!)
   const dropOldTablesQuery = `
     DROP TABLE IF EXISTS transactions CASCADE;
@@ -64,5 +64,3 @@ pool.on("connect", () => {
 pool.on("error", (err) => {
   console.error("❌ Unexpected error on the database client", err);
 });
-
-initDB();

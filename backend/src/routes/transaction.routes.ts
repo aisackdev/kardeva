@@ -3,12 +3,15 @@ import {
   createTransaction,
   getTransactions,
   getSummary,
+  getChartData,
 } from "../controllers/transaction.controller.js";
 
 const router = Router();
 
+router.get("/summary", getSummary);
+router.get("/chart", getChartData);
+
 router.post("/", createTransaction);
 router.get("/", getTransactions);
-router.get("/summary", getSummary);
 
 export default router;
