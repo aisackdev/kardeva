@@ -12,9 +12,16 @@ export interface Transaction {
   auth_code: string;
   amount: string;
   is_third_party: boolean;
+  third_party_id?: string;
+  third_party_name?: string;
 }
 
 export interface ChartData {
   day: string;
   total: number;
+}
+
+export interface ThirdParty {
+  id: string;
+  name: string;
 }

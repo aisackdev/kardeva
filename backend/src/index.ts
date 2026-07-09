@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import systemRoutes from "./routes/system.routes.js";
 import transactionRoutes from "./routes/transaction.routes.js";
+import thirdPartyRoutes from "./routes/thirdParty.routes.js";
 import { initDB } from "./db.js";
 import { addClient, removeClient } from "./sse.js";
 
@@ -20,6 +21,7 @@ app.use(express.json());
 // Routes
 app.use("/", systemRoutes);
 app.use("/api/transactions", transactionRoutes);
+app.use("/api/third-parties", thirdPartyRoutes);
 
 app.get("/api/stream", (req, res) => {
   // Required headers for SSE

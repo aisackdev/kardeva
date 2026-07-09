@@ -4,6 +4,7 @@ import {
   getTransactions,
   getSummary,
   getChartData,
+  updateTransactionAssignment,
 } from "../controllers/transaction.controller.js";
 
 const router = Router();
@@ -13,5 +14,6 @@ router.get("/chart", getChartData);
 
 router.post("/", createTransaction);
 router.get("/", getTransactions);
+router.patch("/:id/assign", updateTransactionAssignment);
 
 export default router;

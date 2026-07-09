@@ -1,5 +1,11 @@
+// frontend/src/App.tsx
 import { useEffect, useState } from "react";
-import type { DbStatusResponse, Transaction, ChartData } from "./types";
+import type {
+  DbStatusResponse,
+  Transaction,
+  ChartData,
+  ThirdParty,
+} from "./types";
 import {
   BarChart,
   Bar,
@@ -11,186 +17,233 @@ import {
 } from "recharts";
 
 function App() {
-  // Here will save the message from the backend
   const [message, setMessage] = useState<string>("Loading...");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [totalExpenses, setTotalExpenses] = useState<number>(0);
   const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [totalExpenses, setTotalExpenses] = useState<number>(0);
+  const [personalExpenses, setPersonalExpenses] = useState<number>(0);
+  const [thirdPartyExpenses, setThirdPartyExpenses] = useState<number>(0);
 
-  // Hardcoded monthly income for now (e.g. 1,000,000 colones)
+  // Third Parties & Modal States
+  const [thirdParties, setThirdParties] = useState<ThirdParty[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [newPersonName, setNewPersonName] = useState<string>("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState<string>("");
+  const [assignModalOpen, setAssignModalOpen] = useState<boolean>(false);
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+
   const monthlyIncome = 1000000;
   const availableBalance = monthlyIncome - totalExpenses;
 
-  // NEW: Function to load chart data
+  // --- API FETCHING ---
   const fetchChartData = () => {
+    /* same as before */
     const apiUrl = import.meta.env.VITE_API_URL;
     fetch(`${apiUrl}/api/transactions/chart`)
       .then((res) => res.json())
       .then((data) => {
-        setChartData(data.chartData);
-      })
-      .catch((error) => console.error("Error fetching chart data:", error));
+        if (data.chartData) setChartData(data.chartData);
+      });
   };
-
-  // Function to load the transactions from the backend
   const fetchTransactions = () => {
+    /* same as before */
     const apiUrl = import.meta.env.VITE_API_URL;
     fetch(`${apiUrl}/api/transactions`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.transactions) {
-          setTransactions(data.transactions);
-        }
-      })
-      .catch((error) => console.error("Error fetching transactions:", error));
+        if (data.transactions) setTransactions(data.transactions);
+      });
   };
-
-  // Function to load the summary
   const fetchSummary = () => {
+    /* same as before */
     const apiUrl = import.meta.env.VITE_API_URL;
     fetch(`${apiUrl}/api/transactions/summary`)
       .then((res) => res.json())
       .then((data) => {
         if (data.totalExpenses !== undefined) {
           setTotalExpenses(data.totalExpenses);
+          setPersonalExpenses(data.personalExpenses);
+          setThirdPartyExpenses(data.thirdPartyExpenses);
         }
-      })
-      .catch((error) => console.error("Error fetching summary:", error));
+      });
+  };
+  const fetchThirdParties = () => {
+    /* same as before */
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/third-parties`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.thirdParties) setThirdParties(data.thirdParties);
+      });
   };
 
   useEffect(() => {
-    // We read the environment variable from VITE
     const apiUrl = import.meta.env.VITE_API_URL;
-
-    // We send the request to the backend
     fetch(`${apiUrl}/api/db-status`)
-      .then((response) => response.json()) // The backend sends a plain text on route '/'
+      .then((res) => res.json())
       .then((data: DbStatusResponse) =>
         setMessage(
           `${data.message} (DB time: ${new Date(data.serverTime).toLocaleString()})`,
         ),
       )
-      .catch((error) => {
-        console.error("There was an error connecting to the backend:", error);
-        setMessage("There was an error connecting to the server 😢");
-      });
+      .catch(() => setMessage("Error connecting to server 😢"));
 
     fetchTransactions();
     fetchSummary();
     fetchChartData();
+    fetchThirdParties();
 
-    // Connect to the SSE Stream (Turn on the radio)
     const eventSource = new EventSource(`${apiUrl}/api/stream`);
-
-    // Listen for our custom 'new_transaction' event
-    eventSource.addEventListener("new_transaction", (event) => {
-      console.log("New transaction received from server!", event.data);
-
-      // We received a whisper, now we re-fetch all data to update the UI automatically
+    eventSource.addEventListener("new_transaction", () => {
       fetchTransactions();
       fetchSummary();
       fetchChartData();
     });
-
-    // Cleanup function - Close the connection if the user leaves the page
-    return () => {
-      eventSource.close();
-    };
+    eventSource.addEventListener("transaction_updated", () => {
+      fetchTransactions();
+      fetchSummary();
+      fetchChartData();
+    });
+    return () => eventSource.close();
   }, []);
 
-  // Button test to simulate Apps Script from Google
+  // --- THIRD PARTY CRUD ---
+  const handleAddPerson = () => {
+    if (!newPersonName.trim()) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/third-parties`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newPersonName }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) alert(data.error);
+        else {
+          setNewPersonName("");
+          fetchThirdParties();
+        }
+      });
+  };
+
+  const handleUpdatePerson = (id: string) => {
+    if (!editName.trim()) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/third-parties/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editName }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) alert(data.error);
+        else {
+          setEditingId(null);
+          fetchThirdParties();
+          fetchTransactions();
+        } // Re-fetch transactions to update names!
+      });
+  };
+
+  const handleDeletePerson = (id: string) => {
+    if (
+      !confirm(
+        "Are you sure? Their transactions will become personal expenses.",
+      )
+    )
+      return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/third-parties/${id}`, { method: "DELETE" }).then(
+      () => {
+        fetchThirdParties();
+        fetchTransactions();
+        fetchSummary();
+      },
+    );
+  };
+
+  // --- HELPERS ---
   const simulateGoogleScript = () => {
     const apiUrl = import.meta.env.VITE_API_URL;
-    const randomAuth = Math.floor(Math.random() * 1000000).toString();
-    const amounts = [1500, 4500.5, 12000, 890];
-    const merchants = ["Uber Eats", "Starbucks", "Amazon", "Netflix"];
+    const isThirdParty = Math.random() > 0.7 && thirdParties.length > 0;
+    const randomPerson = isThirdParty
+      ? thirdParties[Math.floor(Math.random() * thirdParties.length)]
+      : null;
 
-    const mockTransaction = {
-      merchant: merchants[Math.floor(Math.random() * merchants.length)],
-      location: "San Jose, CR",
-      date: new Date().toISOString(),
-      card_type: "Visa",
-      auth_code: `AUTH-${randomAuth}`,
-      amount: amounts[Math.floor(Math.random() * amounts.length)],
-      is_third_party: false,
-    };
+    // Simulating dirty bank locations
+    const locations = [" , San Jose", "Heredia", " , Cartago ", "Online"];
 
     fetch(`${apiUrl}/api/transactions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(mockTransaction),
-    }).then(() => {
-      fetchTransactions(); // Refresh the list after adding!
-      fetchSummary(); // Refresh the summary after adding a new transaction!
-      fetchChartData(); // Refresh chart after new transaction!
+      body: JSON.stringify({
+        merchant: "Store " + Math.floor(Math.random() * 100),
+        location: locations[Math.floor(Math.random() * locations.length)],
+        date: new Date().toISOString(),
+        card_type: "Visa",
+        auth_code: `AUTH-${Math.floor(Math.random() * 1000000)}`,
+        amount: 1500,
+        is_third_party: isThirdParty,
+        third_party_id: randomPerson ? randomPerson.id : null,
+      }),
     });
   };
 
-  // Helper function to format currency without decimals
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString("es-CR", {
-      maximumFractionDigits: 0,
+  const assignThirdPartyToTx = (personId: string | null) => {
+    if (!selectedTx) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    fetch(`${apiUrl}/api/transactions/${selectedTx.id}/assign`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        is_third_party: personId !== null, // True if there is an ID, False if null
+        third_party_id: personId,
+      }),
+    }).then(() => {
+      // Close the modal, SSE will trigger the UI reload automatically!
+      setAssignModalOpen(false);
+      setSelectedTx(null);
     });
   };
+
+  const formatCurrency = (amount: number) =>
+    amount.toLocaleString("es-CR", { maximumFractionDigits: 0 });
+
+  // Clean location using Regex: removes spaces and commas from the start
+  const cleanLocation = (loc: string) =>
+    loc ? loc.replace(/^[\s,]+/, "").trim() : "Unknown";
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center">
-      <div className="w-full max-w-2xl">
+    <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center relative">
+      <div className="w-full max-w-4xl">
         {/* Header Section */}
-        <header className="bg-white p-6 rounded-xl shadow-sm mb-6 flex justify-between items-center border border-gray-100">
+        <header className="bg-white p-6 rounded-xl shadow-sm mb-6 flex flex-col md:flex-row justify-between items-center border border-gray-100 gap-4">
           <div>
             <h1 className="text-3xl font-extrabold text-gray-800">Kardeva</h1>
             <p className="text-sm text-gray-500 font-medium mt-1">
               Financial Dashboard
             </p>
           </div>
-          <button
-            onClick={simulateGoogleScript}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-sm text-sm"
-          >
-            + Add Test Transaction
-          </button>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold py-2 px-4 rounded-lg text-sm transition-colors border border-gray-300"
+            >
+              Manage People
+            </button>
+            <button
+              onClick={simulateGoogleScript}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-sm text-sm"
+            >
+              Simulate Transaction
+            </button>
+          </div>
         </header>
 
-        {/* DB Status Banner */}
-        <div className="mb-6 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 text-center">
-          {message}
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          {/* Income Card */}
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-            <span className="text-gray-500 text-sm font-semibold mb-1">
-              Monthly Income
-            </span>
-            <span className="text-2xl font-extrabold text-green-600">
-              + ₡{formatCurrency(monthlyIncome)}
-            </span>
-          </div>
-
-          {/* Expenses Card */}
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-            <span className="text-gray-500 text-sm font-semibold mb-1">
-              Total Expenses
-            </span>
-            <span className="text-2xl font-extrabold text-red-600">
-              - ₡{formatCurrency(totalExpenses)}
-            </span>
-          </div>
-
-          {/* Balance Card */}
-          <div className="bg-gray-900 p-5 rounded-xl shadow-md border border-gray-800 flex flex-col">
-            <span className="text-gray-400 text-sm font-semibold mb-1">
-              Available Balance
-            </span>
-            <span className="text-2xl font-extrabold text-white">
-              = ₡{formatCurrency(availableBalance)}
-            </span>
-          </div>
-        </div>
-
-        {/* --- Chart Section */}
+        {/* Chart Section */}
         <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 mb-6">
           <h2 className="text-lg font-bold text-gray-700 mb-4">
             Expenses Last 7 Days
@@ -213,7 +266,7 @@ function App() {
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: "#9ca3af", fontSize: 12 }}
-                  tickFormatter={(value) => `₡${value / 1000}k`} // Format to show 1k, 2k, etc.
+                  tickFormatter={(value) => `₡${value / 1000}k`}
                 />
                 <Tooltip
                   cursor={{ fill: "#f3f4f6" }}
@@ -228,47 +281,242 @@ function App() {
           </div>
         </div>
 
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {/* ... Keep your 4 cards ... */}
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col">
+            <span className="text-gray-500 text-xs font-semibold mb-1">
+              Monthly Income
+            </span>
+            <span className="text-xl font-extrabold text-green-600">
+              + ₡{formatCurrency(monthlyIncome)}
+            </span>
+          </div>
+          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col">
+            <span className="text-gray-500 text-xs font-semibold mb-1">
+              My Expenses
+            </span>
+            <span className="text-xl font-extrabold text-red-600">
+              - ₡{formatCurrency(personalExpenses)}
+            </span>
+          </div>
+          <div className="bg-orange-50 p-5 rounded-xl shadow-sm border border-orange-100 flex flex-col">
+            <span className="text-orange-700 text-xs font-semibold mb-1">
+              Lent to Others
+            </span>
+            <span className="text-xl font-extrabold text-orange-600">
+              - ₡{formatCurrency(thirdPartyExpenses)}
+            </span>
+          </div>
+          <div className="bg-gray-900 p-5 rounded-xl shadow-md border border-gray-800 flex flex-col">
+            <span className="text-gray-400 text-xs font-semibold mb-1">
+              Available Balance
+            </span>
+            <span className="text-xl font-extrabold text-white">
+              = ₡{formatCurrency(availableBalance)}
+            </span>
+          </div>
+        </div>
+
         {/* Transactions List */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-5 border-b border-gray-100 bg-gray-50">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6">
+          <div className="p-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
             <h2 className="text-lg font-bold text-gray-700">
               Recent Transactions
             </h2>
           </div>
 
           <ul className="divide-y divide-gray-100">
-            {transactions.length === 0 ? (
-              <li className="p-6 text-center text-gray-400">
-                No transactions yet.
-              </li>
-            ) : (
-              transactions.map((tx) => (
-                <li
-                  key={tx.id}
-                  className="p-5 hover:bg-gray-50 transition-colors flex justify-between items-center"
-                >
-                  <div className="flex flex-col">
+            {transactions.map((tx) => (
+              <li
+                key={tx.id}
+                className="p-5 hover:bg-gray-50 transition-colors flex justify-between items-center"
+              >
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
                     <span className="font-bold text-gray-800">
                       {tx.merchant}
                     </span>
-                    <span className="text-xs text-gray-400 mt-1">
-                      {new Date(tx.date).toLocaleDateString()} • {tx.card_type}
-                    </span>
                   </div>
-                  <div className="flex flex-col items-end">
-                    <span className="font-bold text-red-600">
-                      - ₡{formatCurrency(Number(tx.amount))}
-                    </span>
-                    <span className="text-[10px] text-gray-400 mt-1 font-mono">
-                      {tx.auth_code}
-                    </span>
-                  </div>
-                </li>
-              ))
-            )}
+                  {/* NEW: Display cleaned location! */}
+                  <span className="text-xs text-gray-400 mt-1">
+                    {new Date(tx.date).toLocaleDateString()} •{" "}
+                    {cleanLocation(tx.location)} • {tx.card_type}
+                  </span>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span
+                    className={`font-bold ${tx.is_third_party ? "text-orange-600" : "text-red-600"}`}
+                  >
+                    - ₡{formatCurrency(Number(tx.amount))}
+                  </span>
+
+                  {/* NEW: Assign Button */}
+                  <button
+                    onClick={() => {
+                      setSelectedTx(tx);
+                      setAssignModalOpen(true);
+                    }}
+                    className={`text-[10px] px-2 py-1 rounded transition-colors font-bold ${
+                      tx.is_third_party
+                        ? "bg-orange-100 text-orange-800 hover:bg-orange-200"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {tx.is_third_party
+                      ? `FOR: ${tx.third_party_name?.toUpperCase()}`
+                      : "ASSIGN"}
+                  </button>
+                </div>
+              </li>
+            ))}
           </ul>
         </div>
       </div>
+
+      {/* --- MODAL FOR THIRD PARTIES --- */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="font-bold text-lg text-gray-800">Manage People</h2>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-gray-400 hover:text-red-500 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto flex-1">
+              <div className="flex gap-2 mb-6">
+                <input
+                  type="text"
+                  placeholder="New person's name..."
+                  value={newPersonName}
+                  onChange={(e) => setNewPersonName(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 outline-none focus:border-indigo-500"
+                />
+                <button
+                  onClick={handleAddPerson}
+                  className="bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg text-sm"
+                >
+                  Add
+                </button>
+              </div>
+
+              <ul className="divide-y divide-gray-100">
+                {thirdParties.map((person) => (
+                  <li
+                    key={person.id}
+                    className="py-3 flex justify-between items-center"
+                  >
+                    {editingId === person.id ? (
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="border border-indigo-300 rounded px-2 py-1 text-sm outline-none w-1/2"
+                        autoFocus
+                      />
+                    ) : (
+                      <span className="font-medium text-gray-700">
+                        {person.name}
+                      </span>
+                    )}
+
+                    <div className="flex gap-2">
+                      {editingId === person.id ? (
+                        <button
+                          onClick={() => handleUpdatePerson(person.id)}
+                          className="text-xs text-white bg-green-500 px-2 py-1 rounded"
+                        >
+                          Save
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingId(person.id);
+                            setEditName(person.name);
+                          }}
+                          className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeletePerson(person.id)}
+                        className="text-xs text-red-600 bg-red-50 px-2 py-1 rounded hover:bg-red-100"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* --- NEW MODAL: ASSIGN TRANSACTION --- */}
+      {assignModalOpen && selectedTx && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="font-bold text-lg text-gray-800">
+                Assign Transaction
+              </h2>
+              <button
+                onClick={() => setAssignModalOpen(false)}
+                className="text-gray-400 hover:text-red-500 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 bg-gray-50">
+              <p className="text-sm text-gray-600 mb-1">Transaction:</p>
+              <p className="font-bold text-gray-800">
+                {selectedTx.merchant} (- ₡
+                {formatCurrency(Number(selectedTx.amount))})
+              </p>
+            </div>
+
+            <div className="p-5">
+              <p className="text-sm font-semibold text-gray-500 mb-3">
+                Who is this expense for?
+              </p>
+              <ul className="space-y-2">
+                {/* Option to revert to personal expense */}
+                <li>
+                  <button
+                    onClick={() => assignThirdPartyToTx(null)}
+                    className="w-full text-left px-4 py-3 rounded-lg border border-gray-200 hover:border-indigo-500 hover:bg-indigo-50 transition-colors font-medium text-gray-700"
+                  >
+                    It's mine (Personal Expense)
+                  </button>
+                </li>
+
+                {/* List all registered third parties */}
+                {thirdParties.map((person) => (
+                  <li key={person.id}>
+                    <button
+                      onClick={() => assignThirdPartyToTx(person.id)}
+                      className="w-full text-left px-4 py-3 rounded-lg border border-gray-200 hover:border-orange-500 hover:bg-orange-50 transition-colors font-medium text-gray-700"
+                    >
+                      {person.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {thirdParties.length === 0 && (
+                <p className="text-xs text-red-500 mt-3">
+                  * You need to add people in "Manage People" first.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
