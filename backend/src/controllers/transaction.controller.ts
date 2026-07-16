@@ -14,12 +14,14 @@ export const createTransaction = async (req: Request, res: Response) => {
       amount,
       is_third_party,
       third_party_id,
+      type,
+      is_base,
     } = req.body;
 
     // 2. We write the SQL query using placeholders ($1, $2, etc.) for security
     const insertQuery = `
-      INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, is_third_party, third_party_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, is_third_party, third_party_id, type, is_base)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *; 
     `;
     // 'RETURNING *' tells Postgres to give us back the row it just created
@@ -33,6 +35,8 @@ export const createTransaction = async (req: Request, res: Response) => {
       amount,
       is_third_party || false, // Default to false if not provided
       third_party_id || null, // Default to null if not provided
+      type || "EXPENSE",
+      is_base || false,
     ];
 
     // 3. We execute the query
@@ -63,13 +67,13 @@ export const createTransaction = async (req: Request, res: Response) => {
 
 export const getTransactions = async (req: Request, res: Response) => {
   try {
-    // We order by date descending (newest first)
     const selectQuery = `
       SELECT t.*, p.name as third_party_name 
       FROM transactions t
       LEFT JOIN third_parties p ON t.third_party_id = p.id
+      WHERE t.type = 'EXPENSE' AND t.is_base = false
       ORDER BY t.date DESC 
-      LIMIT 10;
+      LIMIT 15; 
     `;
 
     const result = await pool.query(selectQuery);
@@ -85,24 +89,29 @@ export const getTransactions = async (req: Request, res: Response) => {
 
 export const getSummary = async (req: Request, res: Response) => {
   try {
-    // COALESCE prevents returning NULL if there are no transactions (returns 0 instead)
     const summaryQuery = `
       SELECT 
-        COALESCE(SUM(amount) FILTER (WHERE is_third_party = false), 0) AS personal_expenses,
-        COALESCE(SUM(amount) FILTER (WHERE is_third_party = true), 0) AS third_party_expenses
+        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = false), 0) AS personal_expenses,
+        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = true), 0) AS fixed_expenses,
+        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = true), 0) AS third_party_expenses,
+        COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME' AND is_base = true), 0) AS base_income,
+        COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME' AND is_base = false), 0) AS extra_income
       FROM transactions;
     `;
 
     const result = await pool.query(summaryQuery);
     const personal = parseFloat(result.rows[0].personal_expenses);
+    const fixed = parseFloat(result.rows[0].fixed_expenses); // <-- NEW
     const thirdParty = parseFloat(result.rows[0].third_party_expenses);
+    const baseIncome = parseFloat(result.rows[0].base_income);
+    const extraIncome = parseFloat(result.rows[0].extra_income);
 
     res.status(200).json({
-      // Backward compatibility: we send the sum so the current React doesn't crash
-      totalExpenses: personal + thirdParty,
-      // New precise data for our next step
       personalExpenses: personal,
+      fixedExpenses: fixed, // <-- NEW
       thirdPartyExpenses: thirdParty,
+      baseIncome,
+      extraIncome,
     });
   } catch (error) {
     console.error("Error fetching summary:", error);
@@ -118,6 +127,7 @@ export const getChartData = async (req: Request, res: Response) => {
         TO_CHAR(date, 'YYYY-MM-DD') as day,
         SUM(amount) as total
       FROM transactions
+      WHERE type = 'EXPENSE'
       GROUP BY TO_CHAR(date, 'YYYY-MM-DD')
       ORDER BY day ASC
       LIMIT 7;
@@ -138,22 +148,21 @@ export const getChartData = async (req: Request, res: Response) => {
   }
 };
 
-export const updateTransactionAssignment = async (
-  req: Request,
-  res: Response,
-) => {
+export const updateRecentTransaction = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { is_third_party, third_party_id } = req.body;
+    const { merchant, is_base, is_third_party, third_party_id } = req.body;
 
     const updateQuery = `
       UPDATE transactions 
-      SET is_third_party = $1, third_party_id = $2 
-      WHERE id = $3 
+      SET merchant = $1, is_base = $2, is_third_party = $3, third_party_id = $4 
+      WHERE id = $5 
       RETURNING *;
     `;
 
     const result = await pool.query(updateQuery, [
+      merchant,
+      is_base,
       is_third_party,
       third_party_id,
       id,
@@ -170,11 +179,108 @@ export const updateTransactionAssignment = async (
     broadcast("transaction_updated", updatedTransaction);
 
     res.status(200).json({
-      message: "Transaction assigned successfully",
+      message: "Transaction updated successfully",
       transaction: updatedTransaction,
     });
   } catch (error) {
-    console.error("Error assigning transaction:", error);
+    console.error("Error updating transaction:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getIncomes = async (req: Request, res: Response) => {
+  try {
+    const selectQuery = `SELECT * FROM transactions WHERE type = 'INCOME' ORDER BY date DESC;`;
+    const result = await pool.query(selectQuery);
+    res.status(200).json({ incomes: result.rows });
+  } catch (error) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const deleteTransaction = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // 1. Fetch the transaction to check its origin (auth_code)
+    const checkQuery = "SELECT auth_code FROM transactions WHERE id = $1";
+    const checkResult = await pool.query(checkQuery, [id]);
+
+    if (checkResult.rowCount === 0) {
+      res.status(404).json({ error: "Transaction not found" });
+      return;
+    }
+
+    const authCode = checkResult.rows[0].auth_code;
+
+    // 2. If it was created manually (starts with FIX- or INC-), delete it completely
+    if (authCode.startsWith("FIX-") || authCode.startsWith("INC-")) {
+      await pool.query("DELETE FROM transactions WHERE id = $1", [id]);
+
+      broadcast("transaction_deleted", { id });
+      res.status(200).json({ message: "Deleted successfully" });
+    }
+    // 3. If it comes from the bank, DO NOT delete it. Revert it to a normal expense!
+    else {
+      const revertQuery = `
+        UPDATE transactions 
+        SET is_base = false, is_third_party = false, third_party_id = null, type = 'EXPENSE'
+        WHERE id = $1 
+        RETURNING *;
+      `;
+      const updateResult = await pool.query(revertQuery, [id]);
+
+      // We broadcast an UPDATE instead of a DELETE
+      broadcast("transaction_updated", updateResult.rows[0]);
+
+      res.status(200).json({
+        message: "Reverted to normal transaction",
+        transaction: updateResult.rows[0],
+      });
+    }
+  } catch (error) {
+    console.error("Error handling transaction deletion:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const updateTransactionDetails = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    // 1. ADD 'date' to the destructured body
+    const { merchant, amount, is_base, date } = req.body;
+
+    // 2. UPDATE the SQL query to include date = $4
+    const updateQuery = `
+      UPDATE transactions 
+      SET merchant = $1, amount = $2, is_base = $3, date = $4 
+      WHERE id = $5 
+      RETURNING *;
+    `;
+
+    // 3. Pass the date variable into the array
+    const result = await pool.query(updateQuery, [
+      merchant,
+      amount,
+      is_base,
+      date,
+      id,
+    ]);
+
+    broadcast("transaction_updated", result.rows[0]);
+    res.status(200).json({ transaction: result.rows[0] });
+  } catch (error) {
+    console.error("Error updating income:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getFixedExpenses = async (req: Request, res: Response) => {
+  try {
+    const selectQuery = `SELECT * FROM transactions WHERE type = 'EXPENSE' AND is_base = true ORDER BY date DESC;`;
+    const result = await pool.query(selectQuery);
+    res.status(200).json({ fixedExpenses: result.rows });
+  } catch (error) {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

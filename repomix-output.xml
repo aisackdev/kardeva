@@ -44,9 +44,11 @@ backend/
   src/
     controllers/
       system.controller.ts
+      thirdParty.controller.ts
       transaction.controller.ts
     routes/
       system.routes.ts
+      thirdParty.routes.ts
       transaction.routes.ts
     db.ts
     index.ts
@@ -85,29 +87,6 @@ docker-compose.yml
 <files>
 This section contains the contents of the repository's files.
 
-<file path="backend/src/sse.ts">
-import type { Response } from "express";
-
-// Array to store all connected users (browsers)
-let clients: Response[] = [];
-
-export const addClient = (res: Response) => {
-  clients.push(res);
-};
-
-export const removeClient = (res: Response) => {
-  clients = clients.filter((client) => client !== res);
-};
-
-// Function to send a message to everyone
-export const broadcast = (event: string, data: any) => {
-  clients.forEach((client) => {
-    client.write(`event: ${event}\n`);
-    client.write(`data: ${JSON.stringify(data)}\n\n`);
-  });
-};
-</file>
-
 <file path="backend/src/controllers/system.controller.ts">
 import type { Request, Response } from "express";
 import { pool } from "../db.js";
@@ -133,133 +112,107 @@ export const getDatabaseStatus = async (req: Request, res: Response) => {
 };
 </file>
 
-<file path="backend/src/controllers/transaction.controller.ts">
+<file path="backend/src/controllers/thirdParty.controller.ts">
 import type { Request, Response } from "express";
 import { pool } from "../db.js";
-import { broadcast } from "../sse.js";
 
-export const createTransaction = async (req: Request, res: Response) => {
+// Get all third parties to show them in a dropdown in React
+export const getThirdParties = async (req: Request, res: Response) => {
   try {
-    // 1. We extract the data from the request body (req.body)
-    const {
-      merchant,
-      location,
-      date,
-      card_type,
-      auth_code,
-      amount,
-      is_third_party,
-      third_party_id,
-    } = req.body;
+    const selectQuery = "SELECT * FROM third_parties ORDER BY name ASC;";
+    const result = await pool.query(selectQuery);
 
-    // 2. We write the SQL query using placeholders ($1, $2, etc.) for security
+    res.status(200).json({ thirdParties: result.rows });
+  } catch (error) {
+    console.error("Error fetching third parties:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+// Add a new third party (e.g. "Mom", "Brother")
+export const createThirdParty = async (req: Request, res: Response) => {
+  try {
+    const { name } = req.body;
+
     const insertQuery = `
-      INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, is_third_party, third_party_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING *; 
+      INSERT INTO third_parties (name) 
+      VALUES ($1) 
+      RETURNING *;
     `;
-    // 'RETURNING *' tells Postgres to give us back the row it just created
 
-    const values = [
-      merchant,
-      location,
-      date,
-      card_type,
-      auth_code,
-      amount,
-      is_third_party || false, // Default to false if not provided
-      third_party_id || null, // Default to null if not provided
-    ];
+    const result = await pool.query(insertQuery, [name]);
 
-    // 3. We execute the query
-    const result = await pool.query(insertQuery, values);
-    const newTransaction = result.rows[0];
-
-    broadcast("new_transaction", newTransaction);
-
-    // 4. We send the created transaction back to the client with a 201 Created status
     res.status(201).json({
-      message: "Transaction created successfully",
-      transaction: result.rows[0],
+      message: "Third party added successfully",
+      thirdParty: result.rows[0],
     });
   } catch (error: any) {
-    console.error("Error saving transaction:", error);
+    console.error("Error creating third party:", error);
 
-    // Check if the error is due to a duplicate auth_code (Postgres error code 23505)
+    // Postgres code 23505 means UNIQUE constraint violation
     if (error.code === "23505") {
-      res
-        .status(409)
-        .json({ error: "A transaction with this auth code already exists." });
+      res.status(409).json({ error: "This name already exists." });
+      return;
+    }
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+// NEW: Update a person's name
+export const updateThirdParty = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    const updateQuery = `
+      UPDATE third_parties 
+      SET name = $1 
+      WHERE id = $2 
+      RETURNING *;
+    `;
+    const result = await pool.query(updateQuery, [name, id]);
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: "Person not found" });
       return;
     }
 
+    res.status(200).json({ thirdParty: result.rows[0] });
+  } catch (error: any) {
+    if (error.code === "23505") {
+      res.status(409).json({ error: "This name already exists." });
+      return;
+    }
+    console.error("Error updating third party:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
-export const getTransactions = async (req: Request, res: Response) => {
+// NEW: Delete a person
+export const deleteThirdParty = async (req: Request, res: Response) => {
   try {
-    // We order by date descending (newest first)
-    const selectQuery = `
-      SELECT * FROM transactions 
-      ORDER BY date DESC 
-      LIMIT 10;
+    const { id } = req.params;
+
+    // 1. NEW: Before deleting the person, revert their transactions to personal expenses
+    const revertTransactionsQuery = `
+      UPDATE transactions 
+      SET is_third_party = false 
+      WHERE third_party_id = $1;
     `;
+    await pool.query(revertTransactionsQuery, [id]);
 
-    const result = await pool.query(selectQuery);
+    // 2. Now it's safe to delete the person
+    const deleteQuery = "DELETE FROM third_parties WHERE id = $1 RETURNING *;";
+    const result = await pool.query(deleteQuery, [id]);
 
-    res.status(200).json({
-      transactions: result.rows,
-    });
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: "Person not found" });
+      return;
+    }
+
+    res.status(200).json({ message: "Person deleted successfully" });
   } catch (error) {
-    console.error("Error fetching transactions:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
-
-export const getSummary = async (req: Request, res: Response) => {
-  try {
-    // COALESCE prevents returning NULL if there are no transactions (returns 0 instead)
-    const summaryQuery = `
-      SELECT COALESCE(SUM(amount), 0) AS total_expenses 
-      FROM transactions;
-    `;
-
-    const result = await pool.query(summaryQuery);
-
-    res.status(200).json({
-      totalExpenses: parseFloat(result.rows[0].total_expenses),
-    });
-  } catch (error) {
-    console.error("Error fetching summary:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
-
-export const getChartData = async (req: Request, res: Response) => {
-  try {
-    // We use TO_CHAR to format the date as 'YYYY-MM-DD' and group by it
-    const chartQuery = `
-      SELECT 
-        TO_CHAR(date, 'YYYY-MM-DD') as day,
-        SUM(amount) as total
-      FROM transactions
-      GROUP BY TO_CHAR(date, 'YYYY-MM-DD')
-      ORDER BY day ASC
-      LIMIT 7;
-    `;
-
-    const result = await pool.query(chartQuery);
-
-    // Parse the total from string to number (Postgres SUM returns a string)
-    const formattedData = result.rows.map((row) => ({
-      day: row.day,
-      total: parseFloat(row.total),
-    }));
-
-    res.status(200).json({ chartData: formattedData });
-  } catch (error) {
-    console.error("Error fetching chart data:", error);
+    console.error("Error deleting third party:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -281,141 +234,46 @@ router.get("/api/db-status", getDatabaseStatus);
 export default router;
 </file>
 
-<file path="backend/src/routes/transaction.routes.ts">
+<file path="backend/src/routes/thirdParty.routes.ts">
 import { Router } from "express";
 import {
-  createTransaction,
-  getTransactions,
-  getSummary,
-  getChartData,
-} from "../controllers/transaction.controller.js";
+  getThirdParties,
+  createThirdParty,
+  updateThirdParty,
+  deleteThirdParty,
+} from "../controllers/thirdParty.controller.js";
 
 const router = Router();
 
-router.get("/summary", getSummary);
-router.get("/chart", getChartData);
-
-router.post("/", createTransaction);
-router.get("/", getTransactions);
+router.get("/", getThirdParties);
+router.post("/", createThirdParty);
+router.put("/:id", updateThirdParty);
+router.delete("/:id", deleteThirdParty);
 
 export default router;
 </file>
 
-<file path="backend/src/db.ts">
-import pg from "pg";
+<file path="backend/src/sse.ts">
+import type { Response } from "express";
 
-const { Pool } = pg;
+// Array to store all connected users (browsers)
+let clients: Response[] = [];
 
-export const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: parseInt(process.env.DB_PORT || "5432", 10),
-});
-
-export const initDB = async () => {
-  // 1. WARNING: We drop the tables to recreate them with the new schema (Only for development!)
-  const dropOldTablesQuery = `
-    DROP TABLE IF EXISTS transactions CASCADE;
-    DROP TABLE IF EXISTS third_parties CASCADE;
-  `;
-
-  // 2. We create the table for the people you lend your card to
-  const createThirdPartiesTableQuery = `
-    CREATE TABLE IF NOT EXISTS third_parties (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name VARCHAR(100) NOT NULL UNIQUE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `;
-
-  // 3. We create the main transactions table with all the new banking fields
-  const createTransactionsTableQuery = `
-    CREATE TABLE IF NOT EXISTS transactions (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      merchant VARCHAR(255) NOT NULL,
-      location VARCHAR(255),
-      date TIMESTAMP NOT NULL,
-      card_type VARCHAR(50) NOT NULL,
-      auth_code VARCHAR(100) UNIQUE NOT NULL,
-      amount DECIMAL(12, 2) NOT NULL,
-      
-      -- Fields for third party tracking
-      is_third_party BOOLEAN DEFAULT FALSE,
-      third_party_id UUID REFERENCES third_parties(id) ON DELETE SET NULL,
-      
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `;
-
-  try {
-    await pool.query(dropOldTablesQuery);
-    await pool.query(createThirdPartiesTableQuery);
-    await pool.query(createTransactionsTableQuery);
-    console.log(
-      "✅ Database tables (third_parties & transactions) created successfully.",
-    );
-  } catch (error) {
-    console.error("❌ Error creating database tables:", error);
-  }
+export const addClient = (res: Response) => {
+  clients.push(res);
 };
 
-pool.on("connect", () => {
-  console.log("✅ Conection established sucessfully with PostgreSQL database");
-});
+export const removeClient = (res: Response) => {
+  clients = clients.filter((client) => client !== res);
+};
 
-pool.on("error", (err) => {
-  console.error("❌ Unexpected error on the database client", err);
-});
-</file>
-
-<file path="backend/src/index.ts">
-import "dotenv/config";
-import express from "express";
-import cors from "cors";
-import systemRoutes from "./routes/system.routes.js";
-import transactionRoutes from "./routes/transaction.routes.js";
-import { initDB } from "./db.js";
-import { addClient, removeClient } from "./sse.js";
-
-const app = express();
-const PORT = parseInt(process.env.PORT || "3000", 10);
-
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-  }),
-);
-
-app.use(express.json());
-
-// Routes
-app.use("/", systemRoutes);
-app.use("/api/transactions", transactionRoutes);
-
-app.get("/api/stream", (req, res) => {
-  // Required headers for SSE
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders(); // Establish the connection immediately
-
-  addClient(res); // Add user to our list
-  console.log("Client connected to SSE stream");
-
-  // If user closes the browser, remove them from the list
-  req.on("close", () => {
-    removeClient(res);
-    console.log("Client disconnected");
+// Function to send a message to everyone
+export const broadcast = (event: string, data: any) => {
+  clients.forEach((client) => {
+    client.write(`event: ${event}\n`);
+    client.write(`data: ${JSON.stringify(data)}\n\n`);
   });
-});
-
-await initDB();
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on port ${PORT}`);
-});
+};
 </file>
 
 <file path="backend/.dockerignore">
@@ -558,290 +416,6 @@ CMD ["npm", "run", "dev"]
 </svg>
 </file>
 
-<file path="frontend/src/types/index.ts">
-export interface DbStatusResponse {
-  message: string;
-  serverTime: string;
-}
-
-export interface Transaction {
-  id: string;
-  merchant: string;
-  location: string;
-  date: string;
-  card_type: string;
-  auth_code: string;
-  amount: string;
-  is_third_party: boolean;
-}
-
-export interface ChartData {
-  day: string;
-  total: number;
-}
-</file>
-
-<file path="frontend/src/App.tsx">
-import { useEffect, useState } from "react";
-import type { DbStatusResponse, Transaction, ChartData } from "./types";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-
-function App() {
-  // Here will save the message from the backend
-  const [message, setMessage] = useState<string>("Loading...");
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [totalExpenses, setTotalExpenses] = useState<number>(0);
-  const [chartData, setChartData] = useState<ChartData[]>([]);
-
-  // Hardcoded monthly income for now (e.g. 1,000,000 colones)
-  const monthlyIncome = 1000000;
-  const availableBalance = monthlyIncome - totalExpenses;
-
-  // NEW: Function to load chart data
-  const fetchChartData = () => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/chart`)
-      .then((res) => res.json())
-      .then((data) => {
-        setChartData(data.chartData);
-      })
-      .catch((error) => console.error("Error fetching chart data:", error));
-  };
-
-  // Function to load the transactions from the backend
-  const fetchTransactions = () => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.transactions) {
-          setTransactions(data.transactions);
-        }
-      })
-      .catch((error) => console.error("Error fetching transactions:", error));
-  };
-
-  // Function to load the summary
-  const fetchSummary = () => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/summary`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.totalExpenses !== undefined) {
-          setTotalExpenses(data.totalExpenses);
-        }
-      })
-      .catch((error) => console.error("Error fetching summary:", error));
-  };
-
-  useEffect(() => {
-    // We read the environment variable from VITE
-    const apiUrl = import.meta.env.VITE_API_URL;
-
-    // We send the request to the backend
-    fetch(`${apiUrl}/api/db-status`)
-      .then((response) => response.json()) // The backend sends a plain text on route '/'
-      .then((data: DbStatusResponse) =>
-        setMessage(
-          `${data.message} (DB time: ${new Date(data.serverTime).toLocaleString()})`,
-        ),
-      )
-      .catch((error) => {
-        console.error("There was an error connecting to the backend:", error);
-        setMessage("There was an error connecting to the server 😢");
-      });
-
-    fetchTransactions();
-    fetchSummary();
-    fetchChartData();
-  }, []);
-
-  // Button test to simulate Apps Script from Google
-  const simulateGoogleScript = () => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    const randomAuth = Math.floor(Math.random() * 1000000).toString();
-    const amounts = [1500, 4500.5, 12000, 890];
-    const merchants = ["Uber Eats", "Starbucks", "Amazon", "Netflix"];
-
-    const mockTransaction = {
-      merchant: merchants[Math.floor(Math.random() * merchants.length)],
-      location: "San Jose, CR",
-      date: new Date().toISOString(),
-      card_type: "Visa",
-      auth_code: `AUTH-${randomAuth}`,
-      amount: amounts[Math.floor(Math.random() * amounts.length)],
-      is_third_party: false,
-    };
-
-    fetch(`${apiUrl}/api/transactions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(mockTransaction),
-    }).then(() => {
-      fetchTransactions(); // Refresh the list after adding!
-      fetchSummary(); // Refresh the summary after adding a new transaction!
-      fetchChartData(); // Refresh chart after new transaction!
-    });
-  };
-
-  // Helper function to format currency without decimals
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString("es-CR", {
-      maximumFractionDigits: 0,
-    });
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center">
-      <div className="w-full max-w-2xl">
-        {/* Header Section */}
-        <header className="bg-white p-6 rounded-xl shadow-sm mb-6 flex justify-between items-center border border-gray-100">
-          <div>
-            <h1 className="text-3xl font-extrabold text-gray-800">Kardeva</h1>
-            <p className="text-sm text-gray-500 font-medium mt-1">
-              Financial Dashboard
-            </p>
-          </div>
-          <button
-            onClick={simulateGoogleScript}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-sm text-sm"
-          >
-            + Add Test Transaction
-          </button>
-        </header>
-
-        {/* DB Status Banner */}
-        <div className="mb-6 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 text-center">
-          {message}
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          {/* Income Card */}
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-            <span className="text-gray-500 text-sm font-semibold mb-1">
-              Monthly Income
-            </span>
-            <span className="text-2xl font-extrabold text-green-600">
-              + ₡{formatCurrency(monthlyIncome)}
-            </span>
-          </div>
-
-          {/* Expenses Card */}
-          <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col">
-            <span className="text-gray-500 text-sm font-semibold mb-1">
-              Total Expenses
-            </span>
-            <span className="text-2xl font-extrabold text-red-600">
-              - ₡{formatCurrency(totalExpenses)}
-            </span>
-          </div>
-
-          {/* Balance Card */}
-          <div className="bg-gray-900 p-5 rounded-xl shadow-md border border-gray-800 flex flex-col">
-            <span className="text-gray-400 text-sm font-semibold mb-1">
-              Available Balance
-            </span>
-            <span className="text-2xl font-extrabold text-white">
-              = ₡{formatCurrency(availableBalance)}
-            </span>
-          </div>
-        </div>
-
-        {/* --- Chart Section */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 mb-6">
-          <h2 className="text-lg font-bold text-gray-700 mb-4">
-            Expenses Last 7 Days
-          </h2>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                  stroke="#f3f4f6"
-                />
-                <XAxis
-                  dataKey="day"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#9ca3af", fontSize: 12 }}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#9ca3af", fontSize: 12 }}
-                  tickFormatter={(value) => `₡${value / 1000}k`} // Format to show 1k, 2k, etc.
-                />
-                <Tooltip
-                  cursor={{ fill: "#f3f4f6" }}
-                  formatter={(value: any) => [
-                    `₡${formatCurrency(Number(value))}`,
-                    "Total",
-                  ]}
-                />
-                <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Transactions List */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-5 border-b border-gray-100 bg-gray-50">
-            <h2 className="text-lg font-bold text-gray-700">
-              Recent Transactions
-            </h2>
-          </div>
-
-          <ul className="divide-y divide-gray-100">
-            {transactions.length === 0 ? (
-              <li className="p-6 text-center text-gray-400">
-                No transactions yet.
-              </li>
-            ) : (
-              transactions.map((tx) => (
-                <li
-                  key={tx.id}
-                  className="p-5 hover:bg-gray-50 transition-colors flex justify-between items-center"
-                >
-                  <div className="flex flex-col">
-                    <span className="font-bold text-gray-800">
-                      {tx.merchant}
-                    </span>
-                    <span className="text-xs text-gray-400 mt-1">
-                      {new Date(tx.date).toLocaleDateString()} • {tx.card_type}
-                    </span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="font-bold text-red-600">
-                      - ₡{formatCurrency(Number(tx.amount))}
-                    </span>
-                    <span className="text-[10px] text-gray-400 mt-1 font-mono">
-                      {tx.auth_code}
-                    </span>
-                  </div>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default App;
-</file>
-
 <file path="frontend/src/index.css">
 @import "tailwindcss";
 </file>
@@ -933,48 +507,6 @@ export default defineConfig([
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-</file>
-
-<file path="frontend/package.json">
-{
-  "name": "frontend",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@tailwindcss/vite": "^4.3.2",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6",
-    "recharts": "^3.9.2"
-  },
-  "devDependencies": {
-    "@babel/core": "^7.29.0",
-    "@eslint/js": "^10.0.1",
-    "@rolldown/plugin-babel": "^0.2.3",
-    "@types/babel__core": "^7.20.5",
-    "@types/node": "^24.12.3",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.1",
-    "autoprefixer": "^10.5.0",
-    "babel-plugin-react-compiler": "^1.0.0",
-    "eslint": "^10.3.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.2",
-    "globals": "^17.6.0",
-    "postcss": "^8.5.15",
-    "tailwindcss": "^4.3.0",
-    "typescript": "~6.0.2",
-    "typescript-eslint": "^8.59.2",
-    "vite": "^8.0.12"
-  }
-}
 </file>
 
 <file path="frontend/README.md">
@@ -1198,6 +730,70 @@ volumes:
   postgres_data:
 </file>
 
+<file path="backend/src/db.ts">
+import pg from "pg";
+
+const { Pool } = pg;
+
+export const pool = new Pool({
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port: parseInt(process.env.DB_PORT || "5432", 10),
+});
+
+export const initDB = async () => {
+  // 1. We create the tables ONLY if they don't exist (No more dropping!)
+  const createThirdPartiesTableQuery = `
+    CREATE TABLE IF NOT EXISTS third_parties (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(100) NOT NULL UNIQUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createTransactionsTableQuery = `
+    CREATE TABLE IF NOT EXISTS transactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      merchant VARCHAR(255) NOT NULL,
+      location VARCHAR(255),
+      date TIMESTAMP NOT NULL,
+      card_type VARCHAR(50) NOT NULL,
+      auth_code VARCHAR(100) UNIQUE NOT NULL,
+      amount DECIMAL(12, 2) NOT NULL,
+      is_third_party BOOLEAN DEFAULT FALSE,
+      third_party_id UUID REFERENCES third_parties(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  // 2. NEW: We use ALTER TABLE to safely add the new column to existing databases
+  const addColumnsQuery = `
+    ALTER TABLE transactions 
+    ADD COLUMN IF NOT EXISTS type VARCHAR(20) DEFAULT 'EXPENSE',
+    ADD COLUMN IF NOT EXISTS is_base BOOLEAN DEFAULT FALSE;
+  `;
+
+  try {
+    await pool.query(createThirdPartiesTableQuery);
+    await pool.query(createTransactionsTableQuery);
+    await pool.query(addColumnsQuery); // Run the migration
+    console.log("✅ Database tables and migrations applied successfully.");
+  } catch (error) {
+    console.error("❌ Error setting up database:", error);
+  }
+};
+
+pool.on("connect", () => {
+  console.log("✅ Conection established sucessfully with PostgreSQL database");
+});
+
+pool.on("error", (err) => {
+  console.error("❌ Unexpected error on the database client", err);
+});
+</file>
+
 <file path="frontend/.gitignore">
 # Logs
 logs
@@ -1228,6 +824,48 @@ dist-ssr
 *.sw?
 </file>
 
+<file path="frontend/package.json">
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.2",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "recharts": "^3.9.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@eslint/js": "^10.0.1",
+    "@rolldown/plugin-babel": "^0.2.3",
+    "@types/babel__core": "^7.20.5",
+    "@types/node": "^24.12.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.5.0",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^4.3.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2",
+    "vite": "^8.0.12"
+  }
+}
+</file>
+
 <file path=".gitignore">
 # Dependencias de Node (Cubre tanto frontend como backend)
 node_modules/
@@ -1250,6 +888,1460 @@ postgres_data/
 .DS_Store
 .vscode/
 .idea/
+</file>
+
+<file path="backend/src/controllers/transaction.controller.ts">
+import type { Request, Response } from "express";
+import { pool } from "../db.js";
+import { broadcast } from "../sse.js";
+
+export const createTransaction = async (req: Request, res: Response) => {
+  try {
+    // 1. We extract the data from the request body (req.body)
+    const {
+      merchant,
+      location,
+      date,
+      card_type,
+      auth_code,
+      amount,
+      is_third_party,
+      third_party_id,
+      type,
+      is_base,
+    } = req.body;
+
+    // 2. We write the SQL query using placeholders ($1, $2, etc.) for security
+    const insertQuery = `
+      INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, is_third_party, third_party_id, type, is_base)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING *; 
+    `;
+    // 'RETURNING *' tells Postgres to give us back the row it just created
+
+    const values = [
+      merchant,
+      location,
+      date,
+      card_type,
+      auth_code,
+      amount,
+      is_third_party || false, // Default to false if not provided
+      third_party_id || null, // Default to null if not provided
+      type || "EXPENSE",
+      is_base || false,
+    ];
+
+    // 3. We execute the query
+    const result = await pool.query(insertQuery, values);
+    const newTransaction = result.rows[0];
+
+    broadcast("new_transaction", newTransaction);
+
+    // 4. We send the created transaction back to the client with a 201 Created status
+    res.status(201).json({
+      message: "Transaction created successfully",
+      transaction: result.rows[0],
+    });
+  } catch (error: any) {
+    console.error("Error saving transaction:", error);
+
+    // Check if the error is due to a duplicate auth_code (Postgres error code 23505)
+    if (error.code === "23505") {
+      res
+        .status(409)
+        .json({ error: "A transaction with this auth code already exists." });
+      return;
+    }
+
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getTransactions = async (req: Request, res: Response) => {
+  try {
+    const selectQuery = `
+      SELECT t.*, p.name as third_party_name 
+      FROM transactions t
+      LEFT JOIN third_parties p ON t.third_party_id = p.id
+      WHERE t.type = 'EXPENSE' AND t.is_base = false
+      ORDER BY t.date DESC 
+      LIMIT 15; 
+    `;
+
+    const result = await pool.query(selectQuery);
+
+    res.status(200).json({
+      transactions: result.rows,
+    });
+  } catch (error) {
+    console.error("Error fetching transactions:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getSummary = async (req: Request, res: Response) => {
+  try {
+    const summaryQuery = `
+      SELECT 
+        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = false), 0) AS personal_expenses,
+        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = true), 0) AS fixed_expenses,
+        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = true), 0) AS third_party_expenses,
+        COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME' AND is_base = true), 0) AS base_income,
+        COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME' AND is_base = false), 0) AS extra_income
+      FROM transactions;
+    `;
+
+    const result = await pool.query(summaryQuery);
+    const personal = parseFloat(result.rows[0].personal_expenses);
+    const fixed = parseFloat(result.rows[0].fixed_expenses); // <-- NEW
+    const thirdParty = parseFloat(result.rows[0].third_party_expenses);
+    const baseIncome = parseFloat(result.rows[0].base_income);
+    const extraIncome = parseFloat(result.rows[0].extra_income);
+
+    res.status(200).json({
+      personalExpenses: personal,
+      fixedExpenses: fixed, // <-- NEW
+      thirdPartyExpenses: thirdParty,
+      baseIncome,
+      extraIncome,
+    });
+  } catch (error) {
+    console.error("Error fetching summary:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getChartData = async (req: Request, res: Response) => {
+  try {
+    // We use TO_CHAR to format the date as 'YYYY-MM-DD' and group by it
+    const chartQuery = `
+      SELECT 
+        TO_CHAR(date, 'YYYY-MM-DD') as day,
+        SUM(amount) as total
+      FROM transactions
+      WHERE type = 'EXPENSE'
+      GROUP BY TO_CHAR(date, 'YYYY-MM-DD')
+      ORDER BY day ASC
+      LIMIT 7;
+    `;
+
+    const result = await pool.query(chartQuery);
+
+    // Parse the total from string to number (Postgres SUM returns a string)
+    const formattedData = result.rows.map((row) => ({
+      day: row.day,
+      total: parseFloat(row.total),
+    }));
+
+    res.status(200).json({ chartData: formattedData });
+  } catch (error) {
+    console.error("Error fetching chart data:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const updateRecentTransaction = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { merchant, is_base, is_third_party, third_party_id } = req.body;
+
+    const updateQuery = `
+      UPDATE transactions 
+      SET merchant = $1, is_base = $2, is_third_party = $3, third_party_id = $4 
+      WHERE id = $5 
+      RETURNING *;
+    `;
+
+    const result = await pool.query(updateQuery, [
+      merchant,
+      is_base,
+      is_third_party,
+      third_party_id,
+      id,
+    ]);
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: "Transaction not found" });
+      return;
+    }
+
+    const updatedTransaction = result.rows[0];
+
+    // Tell all connected browsers that a transaction changed!
+    broadcast("transaction_updated", updatedTransaction);
+
+    res.status(200).json({
+      message: "Transaction updated successfully",
+      transaction: updatedTransaction,
+    });
+  } catch (error) {
+    console.error("Error updating transaction:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getIncomes = async (req: Request, res: Response) => {
+  try {
+    const selectQuery = `SELECT * FROM transactions WHERE type = 'INCOME' ORDER BY date DESC;`;
+    const result = await pool.query(selectQuery);
+    res.status(200).json({ incomes: result.rows });
+  } catch (error) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const deleteTransaction = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await pool.query("DELETE FROM transactions WHERE id = $1", [id]);
+    broadcast("transaction_deleted", { id });
+    res.status(200).json({ message: "Deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const updateTransactionDetails = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    // 1. ADD 'date' to the destructured body
+    const { merchant, amount, is_base, date } = req.body;
+
+    // 2. UPDATE the SQL query to include date = $4
+    const updateQuery = `
+      UPDATE transactions 
+      SET merchant = $1, amount = $2, is_base = $3, date = $4 
+      WHERE id = $5 
+      RETURNING *;
+    `;
+
+    // 3. Pass the date variable into the array
+    const result = await pool.query(updateQuery, [
+      merchant,
+      amount,
+      is_base,
+      date,
+      id,
+    ]);
+
+    broadcast("transaction_updated", result.rows[0]);
+    res.status(200).json({ transaction: result.rows[0] });
+  } catch (error) {
+    console.error("Error updating income:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const getFixedExpenses = async (req: Request, res: Response) => {
+  try {
+    const selectQuery = `SELECT * FROM transactions WHERE type = 'EXPENSE' AND is_base = true ORDER BY date DESC;`;
+    const result = await pool.query(selectQuery);
+    res.status(200).json({ fixedExpenses: result.rows });
+  } catch (error) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+</file>
+
+<file path="backend/src/routes/transaction.routes.ts">
+import { Router } from "express";
+import {
+  createTransaction,
+  getTransactions,
+  getSummary,
+  getChartData,
+  updateRecentTransaction,
+  getIncomes,
+  deleteTransaction,
+  updateTransactionDetails,
+  getFixedExpenses,
+} from "../controllers/transaction.controller.js";
+
+const router = Router();
+
+router.get("/summary", getSummary);
+router.get("/chart", getChartData);
+router.get("/incomes", getIncomes);
+router.get("/fixed-expenses", getFixedExpenses);
+
+router.post("/", createTransaction);
+router.get("/", getTransactions);
+router.patch("/:id/assign", updateRecentTransaction);
+router.put("/:id", updateTransactionDetails);
+router.delete("/:id", deleteTransaction);
+
+export default router;
+</file>
+
+<file path="backend/src/index.ts">
+import "dotenv/config";
+import express from "express";
+import cors from "cors";
+import systemRoutes from "./routes/system.routes.js";
+import transactionRoutes from "./routes/transaction.routes.js";
+import thirdPartyRoutes from "./routes/thirdParty.routes.js";
+import { initDB } from "./db.js";
+import { addClient, removeClient } from "./sse.js";
+
+const app = express();
+const PORT = parseInt(process.env.PORT || "3000", 10);
+
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+  }),
+);
+
+app.use(express.json());
+
+// Routes
+app.use("/", systemRoutes);
+app.use("/api/transactions", transactionRoutes);
+app.use("/api/third-parties", thirdPartyRoutes);
+
+app.get("/api/stream", (req, res) => {
+  // Required headers for SSE
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders(); // Establish the connection immediately
+
+  addClient(res); // Add user to our list
+  console.log("Client connected to SSE stream");
+
+  // If user closes the browser, remove them from the list
+  req.on("close", () => {
+    removeClient(res);
+    console.log("Client disconnected");
+  });
+});
+
+await initDB();
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});
+</file>
+
+<file path="frontend/src/types/index.ts">
+export interface DbStatusResponse {
+  message: string;
+  serverTime: string;
+}
+
+export interface Transaction {
+  id: string;
+  merchant: string;
+  location: string;
+  date: string;
+  card_type: string;
+  auth_code: string;
+  amount: string;
+  is_third_party: boolean;
+  third_party_id?: string;
+  third_party_name?: string;
+  type: string;
+  is_base: boolean;
+}
+
+export interface ChartData {
+  day: string;
+  total: number;
+}
+
+export interface ThirdParty {
+  id: string;
+  name: string;
+}
+</file>
+
+<file path="frontend/src/App.tsx">
+// frontend/src/App.tsx
+import { useEffect, useState } from "react";
+import type { Transaction, ChartData, ThirdParty } from "./types";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+
+function App() {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [personalExpenses, setPersonalExpenses] = useState<number>(0);
+  const [thirdPartyExpenses, setThirdPartyExpenses] = useState<number>(0);
+  const [fixedExpenses, setFixedExpenses] = useState<number>(0);
+
+  // Third Parties & Modal States
+  const [thirdParties, setThirdParties] = useState<ThirdParty[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [newPersonName, setNewPersonName] = useState<string>("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState<string>("");
+
+  // NEW: Edit Recent Transaction Modal States
+  const [editModalOpen, setEditModalOpen] = useState<boolean>(false);
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [editTxMerchant, setEditTxMerchant] = useState<string>("");
+  const [editTxCategory, setEditTxCategory] = useState<
+    "PERSONAL" | "FIXED" | "THIRD_PARTY"
+  >("PERSONAL");
+  const [editTxPersonId, setEditTxPersonId] = useState<string>("");
+
+  // Income States
+  const [incomeSource, setIncomeSource] = useState<string>("");
+  const [incomeAmount, setIncomeAmount] = useState<string>("");
+
+  const [baseIncome, setBaseIncome] = useState<number>(0);
+  const [extraIncome, setExtraIncome] = useState<number>(0);
+  const availableBalance =
+    baseIncome +
+    extraIncome -
+    personalExpenses -
+    thirdPartyExpenses -
+    fixedExpenses;
+
+  // New Income Modal States
+  const [incomesList, setIncomesList] = useState<Transaction[]>([]);
+  const [isIncomeModalOpen, setIsIncomeModalOpen] = useState<boolean>(false);
+  const [isBaseIncome, setIsBaseIncome] = useState<boolean>(true);
+  const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
+
+  // NEW: State for the date. We use a helper to get today in 'YYYY-MM-DD' format
+  // NEW: Robust local date generator (Fixes the 6:00 PM UTC bug)
+  const getTodayDate = () => {
+    const now = new Date();
+    const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    return localNow.toISOString().split("T")[0];
+  };
+  const [incomeDate, setIncomeDate] = useState<string>(getTodayDate());
+
+  // NEW: Fixed Expenses Modal States
+  const [fixedExpensesList, setFixedExpensesList] = useState<Transaction[]>([]);
+  const [isFixedModalOpen, setIsFixedModalOpen] = useState<boolean>(false);
+  const [fixedExpenseName, setFixedExpenseName] = useState<string>("");
+  const [fixedExpenseAmount, setFixedExpenseAmount] = useState<string>("");
+  const [editingFixedId, setEditingFixedId] = useState<string | null>(null);
+  const [fixedExpenseDate, setFixedExpenseDate] =
+    useState<string>(getTodayDate());
+
+  // --- API FETCHING ---
+  const fetchChartData = () => {
+    /* same as before */
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions/chart`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.chartData) setChartData(data.chartData);
+      });
+  };
+
+  const fetchTransactions = () => {
+    /* same as before */
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.transactions) setTransactions(data.transactions);
+      });
+  };
+
+  const fetchSummary = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions/summary`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.personalExpenses !== undefined) {
+          setPersonalExpenses(data.personalExpenses);
+          setFixedExpenses(data.fixedExpenses); // <-- NEW
+          setThirdPartyExpenses(data.thirdPartyExpenses);
+          setBaseIncome(data.baseIncome);
+          setExtraIncome(data.extraIncome);
+        }
+      });
+  };
+
+  // NEW: Fetch Fixed Expenses
+  const fetchFixedExpenses = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions/fixed-expenses`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.fixedExpenses) setFixedExpensesList(data.fixedExpenses);
+      });
+  };
+
+  // NEW: Save Fixed Expense
+  const handleSaveFixedExpense = () => {
+    if (!fixedExpenseName.trim() || !fixedExpenseAmount) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    if (editingFixedId) {
+      fetch(`${apiUrl}/api/transactions/${editingFixedId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchant: fixedExpenseName,
+          amount: Number(fixedExpenseAmount),
+          is_base: true,
+          date: fixedExpenseDate,
+        }),
+      }).then(() => resetFixedForm());
+    } else {
+      const newFixed = {
+        merchant: fixedExpenseName,
+        location: "Auto-Pay",
+        date: fixedExpenseDate,
+        card_type: "DIRECT",
+        auth_code: `FIX-${Math.floor(Math.random() * 1000000)}`,
+        amount: Number(fixedExpenseAmount),
+        is_third_party: false,
+        type: "EXPENSE",
+        is_base: true,
+      };
+      fetch(`${apiUrl}/api/transactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newFixed),
+      }).then(() => resetFixedForm());
+    }
+  };
+
+  const resetFixedForm = () => {
+    setFixedExpenseName("");
+    setFixedExpenseAmount("");
+    setEditingFixedId(null);
+    setFixedExpenseDate(getTodayDate());
+    fetchFixedExpenses();
+  };
+
+  const fetchThirdParties = () => {
+    /* same as before */
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/third-parties`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.thirdParties) setThirdParties(data.thirdParties);
+      });
+  };
+
+  const fetchIncomes = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions/incomes`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.incomes) setIncomesList(data.incomes);
+      });
+  };
+
+  useEffect(() => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    fetchTransactions();
+    fetchSummary();
+    fetchChartData();
+    fetchThirdParties();
+    fetchIncomes();
+    fetchFixedExpenses();
+
+    // Connect to the SSE Stream (Radio)
+    const eventSource = new EventSource(`${apiUrl}/api/stream`);
+
+    // Channel 1: When something is created (POST)
+    eventSource.addEventListener("new_transaction", () => {
+      fetchTransactions();
+      fetchSummary();
+      fetchChartData();
+      fetchIncomes();
+      fetchFixedExpenses();
+    });
+
+    // Channel 2: When something is edited (PUT / PATCH)
+    eventSource.addEventListener("transaction_updated", () => {
+      fetchTransactions();
+      fetchSummary();
+      fetchChartData();
+      fetchIncomes();
+      fetchFixedExpenses();
+    });
+
+    // Channel 3: NEW! When something is deleted (DELETE)
+    eventSource.addEventListener("transaction_deleted", () => {
+      fetchTransactions();
+      fetchSummary();
+      fetchChartData();
+      fetchIncomes();
+      fetchFixedExpenses();
+    });
+
+    // 3. Cleanup on close
+    return () => {
+      eventSource.close();
+    };
+  }, []);
+
+  // --- THIRD PARTY CRUD ---
+  const handleAddPerson = () => {
+    if (!newPersonName.trim()) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/third-parties`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newPersonName }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) alert(data.error);
+        else {
+          setNewPersonName("");
+          fetchThirdParties();
+        }
+      });
+  };
+
+  const handleUpdatePerson = (id: string) => {
+    if (!editName.trim()) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/third-parties/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editName }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) alert(data.error);
+        else {
+          setEditingId(null);
+          fetchThirdParties();
+          fetchTransactions();
+        } // Re-fetch transactions to update names!
+      });
+  };
+
+  const handleDeletePerson = (id: string) => {
+    if (
+      !confirm(
+        "Are you sure? Their transactions will become personal expenses.",
+      )
+    )
+      return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/third-parties/${id}`, { method: "DELETE" }).then(
+      () => {
+        fetchThirdParties();
+        fetchTransactions();
+        fetchSummary();
+      },
+    );
+  };
+
+  // --- HELPERS ---
+  const simulateGoogleScript = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    const isThirdParty = Math.random() > 0.7 && thirdParties.length > 0;
+    const randomPerson = isThirdParty
+      ? thirdParties[Math.floor(Math.random() * thirdParties.length)]
+      : null;
+
+    // Simulating dirty bank locations
+    const locations = [" , San Jose", "Heredia", " , Cartago ", "Online"];
+
+    fetch(`${apiUrl}/api/transactions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        merchant: "Store " + Math.floor(Math.random() * 100),
+        location: locations[Math.floor(Math.random() * locations.length)],
+        date: new Date().toISOString(),
+        card_type: "Visa",
+        auth_code: `AUTH-${Math.floor(Math.random() * 1000000)}`,
+        amount: 1500,
+        is_third_party: isThirdParty,
+        third_party_id: randomPerson ? randomPerson.id : null,
+      }),
+    });
+  };
+
+  const handleSaveRecentTx = () => {
+    if (!selectedTx || !editTxMerchant.trim()) return;
+
+    // If third party is selected, ensure a person is chosen
+    if (editTxCategory === "THIRD_PARTY" && !editTxPersonId) {
+      alert("Please select a person.");
+      return;
+    }
+
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    fetch(`${apiUrl}/api/transactions/${selectedTx.id}/edit`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        merchant: editTxMerchant,
+        is_base: editTxCategory === "FIXED",
+        is_third_party: editTxCategory === "THIRD_PARTY",
+        third_party_id:
+          editTxCategory === "THIRD_PARTY" ? editTxPersonId : null,
+      }),
+    }).then(() => {
+      setEditModalOpen(false);
+      setSelectedTx(null);
+    });
+  };
+
+  // Add Extra Income Function
+  const handleSaveIncome = () => {
+    if (!incomeSource.trim() || !incomeAmount) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    if (editingIncomeId) {
+      // EDIT MODE
+      fetch(`${apiUrl}/api/transactions/${editingIncomeId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchant: incomeSource,
+          amount: Number(incomeAmount),
+          is_base: isBaseIncome,
+          date: incomeDate, // <-- Add date to the update request
+        }),
+      }).then(() => resetIncomeForm());
+    } else {
+      // ADD MODE
+      const newIncome = {
+        merchant: incomeSource,
+        location: "Direct",
+        date: incomeDate, // <-- Add our selected date instead of generating a fixed one!
+        card_type: "TRANSFER",
+        auth_code: `INC-${Math.floor(Math.random() * 1000000)}`,
+        amount: Number(incomeAmount),
+        is_third_party: false,
+        type: "INCOME",
+        is_base: isBaseIncome,
+      };
+
+      fetch(`${apiUrl}/api/transactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newIncome),
+      }).then(() => resetIncomeForm());
+    }
+  };
+
+  const resetIncomeForm = () => {
+    setIncomeSource("");
+    setIncomeAmount("");
+    setIsBaseIncome(true);
+    setEditingIncomeId(null);
+    setIncomeDate(getTodayDate()); // <-- Reset date back to today!
+    fetchIncomes();
+  };
+
+  const handleDeleteIncome = (id: string) => {
+    if (!confirm("Delete this income?")) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions/${id}`, { method: "DELETE" }).then(() =>
+      fetchIncomes(),
+    );
+  };
+
+  const formatCurrency = (amount: number) =>
+    amount.toLocaleString("es-CR", { maximumFractionDigits: 0 });
+
+  // NEW: Helper function to display dates safely in local timezone
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "";
+
+    // We extract the YYYY-MM-DD string part
+    const [year, month, day] = dateString.split("T")[0].split("-");
+
+    // Creating a Date(year, monthIndex, day) forces local time at 00:00 AM
+    const localDate = new Date(Number(year), Number(month) - 1, Number(day));
+    return localDate.toLocaleDateString();
+  };
+
+  // Clean location using Regex: removes spaces and commas from the start
+  const cleanLocation = (loc: string) =>
+    loc ? loc.replace(/^[\s,]+/, "").trim() : "Unknown";
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center relative">
+      <div className="w-full max-w-4xl">
+        {/* Header Section */}
+        <header className="bg-white p-6 rounded-xl shadow-sm mb-6 flex flex-col md:flex-row justify-between items-center border border-gray-100 gap-4">
+          <div>
+            <h1 className="text-3xl font-extrabold text-gray-800">Kardeva</h1>
+            <p className="text-sm text-gray-500 font-medium mt-1">
+              Financial Dashboard
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={simulateGoogleScript}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-sm text-sm"
+            >
+              + Simulate Transaction
+            </button>
+          </div>
+        </header>
+
+        {/* Chart Section */}
+        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 mb-6">
+          <h2 className="text-lg font-bold text-gray-700 mb-4">
+            Expenses Last 7 Days
+          </h2>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="#f3f4f6"
+                />
+                <XAxis
+                  dataKey="day"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#9ca3af", fontSize: 12 }}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#9ca3af", fontSize: 12 }}
+                  tickFormatter={(value) => `₡${value / 1000}k`}
+                />
+                <Tooltip
+                  cursor={{ fill: "#f3f4f6" }}
+                  formatter={(value: any) => [
+                    `₡${formatCurrency(Number(value))}`,
+                    "Total",
+                  ]}
+                />
+                <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        {/* ... Cards... */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {/* ... Total Incomes ... */}
+          <div
+            onClick={() => {
+              fetchIncomes();
+              setIsIncomeModalOpen(true);
+            }}
+            className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col cursor-pointer hover:ring-2 hover:ring-green-400 transition-all group"
+          >
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-gray-500 text-xs font-semibold">
+                Total Incomes
+              </span>
+              <span className="text-[10px] text-green-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                Edit ⚙️
+              </span>
+            </div>
+            <span className="text-xl font-extrabold text-green-600">
+              + ₡{formatCurrency(baseIncome + extraIncome)}
+            </span>
+            <span className="text-[10px] text-gray-400 mt-1">
+              Base: ₡{formatCurrency(baseIncome)} | Extra: ₡
+              {formatCurrency(extraIncome)}
+            </span>
+          </div>
+          {/* ... My Expenses ... */}
+          <div
+            onClick={() => {
+              fetchFixedExpenses();
+              setIsFixedModalOpen(true);
+            }}
+            className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col cursor-pointer hover:ring-2 hover:ring-red-400 transition-all group"
+          >
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-gray-500 text-xs font-semibold">
+                My Expenses
+              </span>
+              <span className="text-[10px] text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                Manage Fixed ⚙️
+              </span>
+            </div>
+            <span className="text-xl font-extrabold text-red-600">
+              - ₡{formatCurrency(personalExpenses + fixedExpenses)}
+            </span>
+            <span className="text-[10px] text-gray-400 mt-1">
+              Fixed: ₡{formatCurrency(fixedExpenses)} | Variable: ₡
+              {formatCurrency(personalExpenses)}
+            </span>
+          </div>
+          {/* ... Lent to Others ... */}
+          <div
+            onClick={() => setIsModalOpen(true)}
+            className="bg-orange-50 p-5 rounded-xl shadow-sm border border-orange-100 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
+          >
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-orange-700 text-xs font-semibold">
+                Lent to Others
+              </span>
+              <span className="text-[10px] text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                Manage ⚙️
+              </span>
+            </div>
+            <span className="text-xl font-extrabold text-orange-600">
+              - ₡{formatCurrency(thirdPartyExpenses)}
+            </span>
+            <span className="text-[10px] text-gray-400 mt-1">
+              People: {thirdParties.length}
+            </span>
+          </div>
+          {/* ... Available Balance ... */}
+          <div className="bg-gray-900 p-5 rounded-xl shadow-md border border-gray-800 flex flex-col">
+            <span className="text-gray-400 text-xs font-semibold mb-1">
+              Available Balance
+            </span>
+            <span className="text-xl font-extrabold text-white">
+              = ₡{formatCurrency(availableBalance)}
+            </span>
+          </div>
+        </div>
+
+        {/* Transactions List */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6">
+          <div className="p-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+            <h2 className="text-lg font-bold text-gray-700">
+              Recent Transactions
+            </h2>
+          </div>
+
+          <ul className="divide-y divide-gray-100">
+            {transactions.map((tx) => (
+              <li
+                key={tx.id}
+                className="p-5 hover:bg-gray-50 transition-colors flex justify-between items-center"
+              >
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-gray-800">
+                      {tx.merchant}
+                    </span>
+                  </div>
+                  {/* NEW: Display cleaned location! */}
+                  <span className="text-xs text-gray-400 mt-1">
+                    {formatDate(tx.date)} • {cleanLocation(tx.location)} •{" "}
+                    {tx.card_type}
+                  </span>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  {tx.type === "INCOME" ? (
+                    <>
+                      <span className="font-bold text-green-600">
+                        + ₡{formatCurrency(Number(tx.amount))}
+                      </span>
+                      <span className="bg-green-100 text-green-800 text-[10px] px-2 py-1 rounded font-bold">
+                        INCOME
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span
+                        className={`font-bold ${tx.is_third_party ? "text-orange-600" : "text-red-600"}`}
+                      >
+                        - ₡{formatCurrency(Number(tx.amount))}
+                      </span>
+                      <button
+                        onClick={() => {
+                          setSelectedTx(tx);
+                          setEditTxMerchant(tx.merchant);
+                          if (tx.is_third_party) {
+                            setEditTxCategory("THIRD_PARTY");
+                            setEditTxPersonId(tx.third_party_id || "");
+                          } else if (tx.is_base) {
+                            setEditTxCategory("FIXED");
+                            setEditTxPersonId("");
+                          } else {
+                            setEditTxCategory("PERSONAL");
+                            setEditTxPersonId("");
+                          }
+                          setEditModalOpen(true);
+                        }}
+                        className="text-[10px] px-3 py-1.5 rounded transition-colors font-bold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 uppercase tracking-wider"
+                      >
+                        {tx.is_third_party
+                          ? `FOR: ${tx.third_party_name}`
+                          : "✏️ EDIT"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {/* --- MODAL FOR THIRD PARTIES --- */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="font-bold text-lg text-gray-800">Manage People</h2>
+              <button
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setEditingId(null);
+                  setNewPersonName("");
+                }}
+                className="text-gray-400 hover:text-red-500 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Form Section */}
+            <div className="p-5 bg-gray-50 border-b border-gray-100">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="New person's name..."
+                  value={newPersonName}
+                  onChange={(e) => setNewPersonName(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 outline-none focus:border-indigo-500"
+                />
+                <button
+                  onClick={handleAddPerson}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+
+            {/* List Section */}
+            <div className="p-5 overflow-y-auto flex-1">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                Registered People
+              </h3>
+              <ul className="divide-y divide-gray-100">
+                {thirdParties.map((person) => (
+                  <li
+                    key={person.id}
+                    className="py-3 flex justify-between items-center"
+                  >
+                    {editingId === person.id ? (
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="border border-indigo-300 rounded px-2 py-1 text-sm outline-none w-1/2"
+                        autoFocus
+                      />
+                    ) : (
+                      <span className="font-medium text-gray-700">
+                        {person.name}
+                      </span>
+                    )}
+
+                    <div className="flex gap-2">
+                      {editingId === person.id ? (
+                        <button
+                          onClick={() => handleUpdatePerson(person.id)}
+                          className="text-xs text-white bg-green-500 px-3 py-1.5 rounded font-semibold"
+                        >
+                          Save
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingId(person.id);
+                            setEditName(person.name);
+                          }}
+                          className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded hover:bg-blue-100 font-semibold"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeletePerson(person.id)}
+                        className="text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded hover:bg-red-100 font-semibold"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                ))}
+
+                {/* Empty State Message */}
+                {thirdParties.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-4">
+                    No people registered yet.
+                  </p>
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* --- NEW MODAL: EDIT RECENT TRANSACTION --- */}
+      {editModalOpen && selectedTx && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h2 className="font-bold text-lg text-gray-800">
+                Edit Transaction
+              </h2>
+              <button
+                onClick={() => setEditModalOpen(false)}
+                className="text-gray-400 hover:text-red-500 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 flex flex-col gap-4">
+              {/* Note / Description */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 mb-1 block">
+                  Description / Note
+                </label>
+                <input
+                  type="text"
+                  value={editTxMerchant}
+                  onChange={(e) => setEditTxMerchant(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-indigo-500 font-medium text-gray-800"
+                />
+              </div>
+
+              {/* Categorization */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 mb-2 block">
+                  Category
+                </label>
+                <div className="flex flex-col gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    <input
+                      type="radio"
+                      name="tx_category"
+                      checked={editTxCategory === "PERSONAL"}
+                      onChange={() => setEditTxCategory("PERSONAL")}
+                      className="w-4 h-4 text-indigo-600"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      🙋‍♂️ Personal (Variable)
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    <input
+                      type="radio"
+                      name="tx_category"
+                      checked={editTxCategory === "FIXED"}
+                      onChange={() => setEditTxCategory("FIXED")}
+                      className="w-4 h-4 text-indigo-600"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      📌 Fixed Expense (Bills, etc)
+                    </span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                    <input
+                      type="radio"
+                      name="tx_category"
+                      checked={editTxCategory === "THIRD_PARTY"}
+                      onChange={() => setEditTxCategory("THIRD_PARTY")}
+                      className="w-4 h-4 text-indigo-600"
+                    />
+                    <span className="text-sm font-medium text-gray-700">
+                      👥 Lent to Someone
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Conditional Select for Third Parties */}
+              {editTxCategory === "THIRD_PARTY" && (
+                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                  <label className="text-xs font-semibold text-orange-600 mb-1 block">
+                    Select Person
+                  </label>
+                  <select
+                    value={editTxPersonId}
+                    onChange={(e) => setEditTxPersonId(e.target.value)}
+                    className="border border-orange-300 rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-orange-500 bg-orange-50"
+                  >
+                    <option value="" disabled>
+                      -- Choose a person --
+                    </option>
+                    {thirdParties.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  {thirdParties.length === 0 && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Please add people in "Manage People" first.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={handleSaveRecentTx}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mt-2 transition-colors shadow-md"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* --- INCOMES MASTER MODAL --- */}
+      {isIncomeModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="font-bold text-lg text-gray-800">
+                Manage Incomes
+              </h2>
+              <button
+                onClick={() => {
+                  setIsIncomeModalOpen(false);
+                  resetIncomeForm();
+                }}
+                className="text-gray-400 hover:text-red-500 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Form Section */}
+            <div className="p-5 bg-gray-50 border-b border-gray-100 flex flex-col gap-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Source (e.g. Salary, Repair)"
+                  value={incomeSource}
+                  onChange={(e) => setIncomeSource(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500"
+                />
+                <input
+                  type="number"
+                  placeholder="Amount (₡)"
+                  value={incomeAmount}
+                  onChange={(e) => setIncomeAmount(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                {/* NEW: Date Picker Input */}
+                <input
+                  type="date"
+                  value={incomeDate}
+                  onChange={(e) => setIncomeDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500 text-gray-600"
+                />
+                <button
+                  onClick={handleSaveIncome}
+                  className="w-1/2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg text-sm transition-colors"
+                >
+                  {editingIncomeId ? "Save Changes" : "Add Income"}
+                </button>
+              </div>
+
+              <label className="flex items-center gap-2 mt-1 cursor-pointer text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={isBaseIncome}
+                  onChange={(e) => setIsBaseIncome(e.target.checked)}
+                  className="w-4 h-4 text-green-600"
+                />
+                Is this a Base/Fixed Income? (Uncheck for Extras)
+              </label>
+            </div>
+            {/* List Section */}
+            <div className="p-5 overflow-y-auto flex-1">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                Registered Incomes
+              </h3>
+              <ul className="divide-y divide-gray-100">
+                {incomesList.map((inc) => (
+                  <li
+                    key={inc.id}
+                    className="py-3 flex justify-between items-center"
+                  >
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-700">
+                          {inc.merchant}
+                        </span>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${inc.is_base ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}
+                        >
+                          {inc.is_base ? "Base" : "Extra"}
+                        </span>
+                      </div>
+                      <span className="text-xs text-green-600 font-bold mt-1">
+                        + ₡{formatCurrency(Number(inc.amount))}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingIncomeId(inc.id);
+                          setIncomeSource(inc.merchant);
+                          setIncomeAmount(inc.amount);
+                          setIsBaseIncome(inc.is_base);
+                          setIncomeDate(inc.date.split("T")[0]);
+                        }}
+                        className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded hover:bg-blue-100 font-semibold"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteIncome(inc.id)}
+                        className="text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded hover:bg-red-100 font-semibold"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                ))}
+                {incomesList.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-4">
+                    No incomes registered yet.
+                  </p>
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* --- FIXED EXPENSES MASTER MODAL --- */}
+      {isFixedModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="font-bold text-lg text-gray-800">
+                Manage Fixed Expenses
+              </h2>
+              <button
+                onClick={() => {
+                  setIsFixedModalOpen(false);
+                  resetFixedForm();
+                }}
+                className="text-gray-400 hover:text-red-500 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Form Section */}
+            <div className="p-5 bg-gray-50 border-b border-gray-100 flex flex-col gap-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. Rent, Internet, Water"
+                  value={fixedExpenseName}
+                  onChange={(e) => setFixedExpenseName(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500"
+                />
+                <input
+                  type="number"
+                  placeholder="Amount (₡)"
+                  value={fixedExpenseAmount}
+                  onChange={(e) => setFixedExpenseAmount(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500"
+                />
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={fixedExpenseDate}
+                  onChange={(e) => setFixedExpenseDate(e.target.value)}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500 text-gray-600"
+                />
+                <button
+                  onClick={handleSaveFixedExpense}
+                  className="w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded-lg text-sm transition-colors"
+                >
+                  {editingFixedId ? "Save Changes" : "Add Fixed Expense"}
+                </button>
+              </div>
+            </div>
+
+            {/* List Section */}
+            <div className="p-5 overflow-y-auto flex-1">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                Registered Fixed Expenses
+              </h3>
+              <ul className="divide-y divide-gray-100">
+                {fixedExpensesList.map((exp) => (
+                  <li
+                    key={exp.id}
+                    className="py-3 flex justify-between items-center"
+                  >
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-700">
+                          {exp.merchant}
+                        </span>
+                        <span className="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">
+                          FIXED
+                        </span>
+                      </div>
+                      <span className="text-xs text-red-600 font-bold mt-1">
+                        - ₡{formatCurrency(Number(exp.amount))}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingFixedId(exp.id);
+                          setFixedExpenseName(exp.merchant);
+                          setFixedExpenseAmount(exp.amount);
+                          setFixedExpenseDate(exp.date.split("T")[0]);
+                        }}
+                        className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded hover:bg-blue-100 font-semibold"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm("Delete this fixed expense?")) {
+                            const apiUrl = import.meta.env.VITE_API_URL;
+                            fetch(`${apiUrl}/api/transactions/${exp.id}`, {
+                              method: "DELETE",
+                            });
+                          }
+                        }}
+                        className="text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded hover:bg-red-100 font-semibold"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                ))}
+                {fixedExpensesList.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-4">
+                    No fixed expenses registered.
+                  </p>
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;
 </file>
 
 </files>

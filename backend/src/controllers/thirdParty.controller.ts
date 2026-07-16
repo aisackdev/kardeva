@@ -78,6 +78,15 @@ export const deleteThirdParty = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
+    // 1. NEW: Before deleting the person, revert their transactions to personal expenses
+    const revertTransactionsQuery = `
+      UPDATE transactions 
+      SET is_third_party = false 
+      WHERE third_party_id = $1;
+    `;
+    await pool.query(revertTransactionsQuery, [id]);
+
+    // 2. Now it's safe to delete the person
     const deleteQuery = "DELETE FROM third_parties WHERE id = $1 RETURNING *;";
     const result = await pool.query(deleteQuery, [id]);
 

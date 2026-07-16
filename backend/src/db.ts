@@ -11,13 +11,7 @@ export const pool = new Pool({
 });
 
 export const initDB = async () => {
-  // 1. WARNING: We drop the tables to recreate them with the new schema (Only for development!)
-  const dropOldTablesQuery = `
-    DROP TABLE IF EXISTS transactions CASCADE;
-    DROP TABLE IF EXISTS third_parties CASCADE;
-  `;
-
-  // 2. We create the table for the people you lend your card to
+  // 1. We create the tables ONLY if they don't exist (No more dropping!)
   const createThirdPartiesTableQuery = `
     CREATE TABLE IF NOT EXISTS third_parties (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -26,7 +20,6 @@ export const initDB = async () => {
     );
   `;
 
-  // 3. We create the main transactions table with all the new banking fields
   const createTransactionsTableQuery = `
     CREATE TABLE IF NOT EXISTS transactions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -36,24 +29,26 @@ export const initDB = async () => {
       card_type VARCHAR(50) NOT NULL,
       auth_code VARCHAR(100) UNIQUE NOT NULL,
       amount DECIMAL(12, 2) NOT NULL,
-      
-      -- Fields for third party tracking
       is_third_party BOOLEAN DEFAULT FALSE,
       third_party_id UUID REFERENCES third_parties(id) ON DELETE SET NULL,
-      
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `;
 
+  // 2. NEW: We use ALTER TABLE to safely add the new column to existing databases
+  const addColumnsQuery = `
+    ALTER TABLE transactions 
+    ADD COLUMN IF NOT EXISTS type VARCHAR(20) DEFAULT 'EXPENSE',
+    ADD COLUMN IF NOT EXISTS is_base BOOLEAN DEFAULT FALSE;
+  `;
+
   try {
-    await pool.query(dropOldTablesQuery);
     await pool.query(createThirdPartiesTableQuery);
     await pool.query(createTransactionsTableQuery);
-    console.log(
-      "✅ Database tables (third_parties & transactions) created successfully.",
-    );
+    await pool.query(addColumnsQuery); // Run the migration
+    console.log("✅ Database tables and migrations applied successfully.");
   } catch (error) {
-    console.error("❌ Error creating database tables:", error);
+    console.error("❌ Error setting up database:", error);
   }
 };
 
