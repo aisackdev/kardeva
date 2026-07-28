@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Transaction, ChartData, ThirdParty } from "./types";
+import type { Transaction, ChartData, ThirdParty, Card } from "./types";
 import {
   BarChart,
   Bar,
@@ -13,6 +13,7 @@ import {
 function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [chartRange, setChartRange] = useState<number | "ALL">("ALL");
   const [personalExpenses, setPersonalExpenses] = useState<number>(0);
   const [thirdPartyExpenses, setThirdPartyExpenses] = useState<number>(0);
   const [fixedExpenses, setFixedExpenses] = useState<number>(0);
@@ -63,6 +64,23 @@ function App() {
   const [fixedExpenseDate, setFixedExpenseDate] =
     useState<string>(getTodayDate());
 
+  // NEW: State for the global month filter (Default to current YYYY-MM)
+  const getCurrentMonth = () => {
+    const now = new Date();
+    const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    return localNow.toISOString().substring(0, 7); // Extracts "YYYY-MM"
+  };
+  const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonth());
+
+  // NEW: Cards Modal States
+  const [cardsList, setCardsList] = useState<Card[]>([]);
+  const [isCardModalOpen, setIsCardModalOpen] = useState<boolean>(false);
+  const [cardName, setCardName] = useState<string>("");
+  const [cardLastFour, setCardLastFour] = useState<string>("");
+  const [cardType, setCardType] = useState<"CREDIT" | "DEBIT">("CREDIT");
+  const [cardCutoff, setCardCutoff] = useState<string>("");
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+
   // --- NEW: DARK MODE LOGIC ---
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     // Check if user has a preference saved in their browser
@@ -91,16 +109,46 @@ function App() {
   // --- API FETCHING ---
   const fetchChartData = () => {
     const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/chart`)
+    fetch(`${apiUrl}/api/transactions/chart?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.chartData) setChartData(data.chartData);
-      });
+        if (data.chartData) {
+          // 1. Get the year and month from the selector
+          const [year, month] = selectedMonth.split("-");
+
+          // 2. Magic trick to find out exactly how many days this month has (28, 30, or 31)
+          const daysInMonth = new Date(
+            Number(year),
+            Number(month),
+            0,
+          ).getDate();
+
+          // 3. We create an array with exactly that many days and fill it
+          const fullMonthData = Array.from({ length: daysInMonth }, (_, i) => {
+            // Build the string matching Postgres format (e.g. "2026-07-05")
+            const dayString = `${year}-${month}-${String(i + 1).padStart(2, "0")}`;
+
+            // Search if the backend gave us any data for this exact day
+            const foundData = data.chartData.find(
+              (d: ChartData) => d.day === dayString,
+            );
+
+            return {
+              day: dayString,
+              total: foundData ? foundData.total : 0, // Put 0 if we didn't spend anything
+            };
+          });
+
+          // 4. Save the perfect array!
+          setChartData(fullMonthData);
+        }
+      })
+      .catch((error) => console.error("Error fetching chart data:", error));
   };
 
   const fetchTransactions = () => {
     const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions`)
+    fetch(`${apiUrl}/api/transactions?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.transactions) setTransactions(data.transactions);
@@ -109,7 +157,7 @@ function App() {
 
   const fetchSummary = () => {
     const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/summary`)
+    fetch(`${apiUrl}/api/transactions/summary?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.personalExpenses !== undefined) {
@@ -124,7 +172,7 @@ function App() {
 
   const fetchFixedExpenses = () => {
     const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/fixed-expenses`)
+    fetch(`${apiUrl}/api/transactions/fixed-expenses?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.fixedExpenses) setFixedExpensesList(data.fixedExpenses);
@@ -185,11 +233,80 @@ function App() {
 
   const fetchIncomes = () => {
     const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/incomes`)
+    fetch(`${apiUrl}/api/transactions/incomes?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.incomes) setIncomesList(data.incomes);
       });
+  };
+
+  // NEW: Fetch Cards
+  const fetchCards = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/cards`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.cards) setCardsList(data.cards);
+      });
+  };
+
+  // NEW: Save Card
+  const handleSaveCard = () => {
+    if (!cardName.trim() || !cardLastFour.trim() || !cardCutoff) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    if (editingCardId) {
+      // EDIT MODE
+      fetch(`${apiUrl}/api/cards/${editingCardId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cardName,
+          last_four: cardLastFour,
+          type: cardType,
+          cutoff_day: Number(cardCutoff),
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.error) alert(data.error);
+          else resetCardForm();
+        });
+    } else {
+      // ADD MODE
+      fetch(`${apiUrl}/api/cards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cardName,
+          last_four: cardLastFour,
+          type: cardType,
+          cutoff_day: Number(cardCutoff),
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.error) alert(data.error);
+          else resetCardForm();
+        });
+    }
+  };
+
+  const resetCardForm = () => {
+    setCardName("");
+    setCardLastFour("");
+    setCardType("CREDIT");
+    setCardCutoff("");
+    setEditingCardId(null);
+    fetchCards();
+  };
+
+  const handleDeleteCard = (id: string) => {
+    if (!confirm("Delete this card?")) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/cards/${id}`, { method: "DELETE" }).then(() =>
+      fetchCards(),
+    );
   };
 
   useEffect(() => {
@@ -200,6 +317,7 @@ function App() {
     fetchThirdParties();
     fetchIncomes();
     fetchFixedExpenses();
+    fetchCards();
 
     const eventSource = new EventSource(`${apiUrl}/api/stream`);
 
@@ -209,6 +327,7 @@ function App() {
       fetchChartData();
       fetchIncomes();
       fetchFixedExpenses();
+      fetchCards();
     };
 
     eventSource.addEventListener("new_transaction", updateAll);
@@ -218,7 +337,7 @@ function App() {
     return () => {
       eventSource.close();
     };
-  }, []);
+  }, [selectedMonth]);
 
   const handleAddPerson = () => {
     if (!newPersonName.trim()) return;
@@ -361,6 +480,11 @@ function App() {
   const cleanLocation = (loc: string) =>
     loc ? loc.replace(/^[\s,]+/, "").trim() : "Unknown";
 
+  // NEW: Calculate which data to display based on the selected range
+  // .slice(-7) takes the last 7 items from the array
+  const displayedChartData =
+    chartRange === "ALL" ? chartData : chartData.slice(-chartRange);
+
   return (
     // Added dark mode transitions to the main wrapper
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6 flex flex-col items-center relative transition-colors duration-300">
@@ -377,12 +501,44 @@ function App() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* NEW: Manage Cards Button */}
+            <button
+              onClick={() => setIsCardModalOpen(true)}
+              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300"
+              title="Manage Cards"
+            >
+              <span className="material-symbols-outlined text-2xl">
+                credit_card
+              </span>
+            </button>
+
+            {/* NEW: Month Picker */}
+            <div className="relative flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-colors cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/80">
+              {/* 1. Google Material Icon (calendar_month) */}
+              <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 mr-2 text-[20px] pointer-events-none">
+                calendar_month
+              </span>
+
+              {/* 2. The invisible-but-functional native input */}
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                onClick={(e) => {
+                  // This tells the browser to force-open the calendar popup when clicking
+                  try {
+                    (e.target as HTMLInputElement).showPicker();
+                  } catch (err) {}
+                }}
+                className="bg-transparent text-gray-700 dark:text-gray-200 font-bold outline-none cursor-pointer w-full appearance-none [&::-webkit-calendar-picker-indicator]:hidden"
+              />
+            </div>
+
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center"
               title="Toggle Dark Mode"
             >
-              {/* USE GOOGLE ICONS: Note the class 'material-symbols-outlined' */}
               {isDarkMode ? (
                 <span className="material-symbols-outlined text-yellow-400 text-3xl">
                   light_mode
@@ -398,13 +554,46 @@ function App() {
 
         {/* Chart Section */}
         <div className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 mb-6 transition-colors duration-300">
-          <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-4">
-            Expenses Last 7 Days
-          </h2>
+          {/* Header & Filters */}
+          <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-2">
+            <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200">
+              Expenses Overview
+            </h2>
+
+            {/* NEW: Chart Range Filters */}
+            <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+              <button
+                onClick={() => setChartRange(7)}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartRange === 7 ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
+              >
+                7D
+              </button>
+              <button
+                onClick={() => setChartRange(14)}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartRange === 14 ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
+              >
+                14D
+              </button>
+              <button
+                onClick={() => setChartRange(21)}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartRange === 21 ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
+              >
+                21D
+              </button>
+              <button
+                onClick={() => setChartRange("ALL")}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartRange === "ALL" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
+              >
+                ALL
+              </button>
+            </div>
+          </div>
+
+          {/* The Chart */}
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                {/* Chart grid adjusts to dark mode */}
+              {/* UPDATED: We feed it the sliced data! */}
+              <BarChart data={displayedChartData}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
@@ -415,6 +604,8 @@ function App() {
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: "#9ca3af", fontSize: 12 }}
+                  /* UPDATED: Since showing 31 dates like "2026-07-22" takes too much space, we format it to only show the Day number (e.g. "22") */
+                  tickFormatter={(val) => val.split("-")[2]}
                 />
                 <YAxis
                   axisLine={false}
@@ -430,6 +621,8 @@ function App() {
                     color: isDarkMode ? "#fff" : "#000",
                     borderRadius: "8px",
                   }}
+                  /* UPDATED: Show the formatted local date in the hover box */
+                  labelFormatter={(label) => formatDate(label)}
                   formatter={(value: any) => [
                     `₡${formatCurrency(Number(value))}`,
                     "Total",
@@ -493,10 +686,11 @@ function App() {
 
           <div
             onClick={() => setIsModalOpen(true)}
-            className="bg-orange-50 dark:bg-orange-950/30 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-orange-900 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
+            // FIXED: Changed dark:bg-orange-950/30 to dark:bg-gray-900 and dark:border-orange-900 to dark:border-gray-800
+            className="bg-orange-50 dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
           >
             <div className="flex justify-between items-center mb-1">
-              <span className="text-orange-700 dark:text-orange-500 text-xs font-semibold">
+              <span className="text-orange-700 dark:text-gray-400 text-xs font-semibold">
                 Lent to Others
               </span>
               <span className="text-[10px] text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -506,16 +700,20 @@ function App() {
             <span className="text-xl font-extrabold text-orange-600 dark:text-orange-400">
               - ₡{formatCurrency(thirdPartyExpenses)}
             </span>
-            <span className="text-[10px] text-orange-400 mt-1">
+            <span className="text-[10px] text-orange-400 dark:text-gray-500 mt-1">
               People: {thirdParties.length}
             </span>
           </div>
 
-          <div className="bg-gray-900 dark:bg-indigo-950/50 p-5 rounded-xl shadow-md border border-gray-800 dark:border-indigo-900 flex flex-col">
-            <span className="text-gray-400 dark:text-indigo-300 text-xs font-semibold mb-1">
+          {/* Card 4: Available Balance */}
+          <div
+            // FIXED: Changed dark:bg-indigo-950/50 to dark:bg-gray-900 and dark:border-indigo-900 to dark:border-gray-800
+            className="bg-gray-900 dark:bg-gray-900 p-5 rounded-xl shadow-md border border-gray-800 dark:border-gray-800 flex flex-col"
+          >
+            <span className="text-gray-400 dark:text-gray-400 text-xs font-semibold mb-1">
               Available Balance
             </span>
-            <span className="text-xl font-extrabold text-white dark:text-indigo-100">
+            <span className="text-xl font-extrabold text-white dark:text-white">
               = ₡{formatCurrency(availableBalance)}
             </span>
           </div>
@@ -525,67 +723,76 @@ function App() {
         <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden mt-6 transition-colors duration-300">
           <div className="p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex justify-between items-center">
             <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200">
-              Recent Transactions
+              Monthly Transactions
             </h2>
+            {/* NEW: Counter badge */}
+            <span className="text-xs font-bold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 px-3 py-1 rounded-full">
+              {transactions.length}
+            </span>
           </div>
 
-          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-            {transactions.map((tx) => (
-              <li
-                key={tx.id}
-                className="p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors flex justify-between items-center"
-              >
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-800 dark:text-gray-200">
-                      {tx.merchant}
+          {/* NEW: max-h-[400px] overflow-y-auto custom-scrollbar makes this specific section scrollable! */}
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[400px] overflow-y-auto custom-scrollbar">
+            {transactions.length === 0 ? (
+              <li className="p-6 text-center text-gray-400">
+                No transactions found for this month.
+              </li>
+            ) : (
+              transactions.map((tx) => (
+                <li
+                  key={tx.id}
+                  className="p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors flex justify-between items-center"
+                >
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-gray-800 dark:text-gray-200">
+                        {tx.merchant}
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-400 mt-1">
+                      {formatDate(tx.date)} • {cleanLocation(tx.location)} •{" "}
+                      {tx.card_type}
                     </span>
                   </div>
-                  <span className="text-xs text-gray-400 mt-1">
-                    {formatDate(tx.date)} • {cleanLocation(tx.location)} •{" "}
-                    {tx.card_type}
-                  </span>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <span
-                    className={`font-bold ${tx.is_third_party ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"}`}
-                  >
-                    - ₡{formatCurrency(Number(tx.amount))}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setSelectedTx(tx);
-                      setEditTxMerchant(tx.merchant);
-                      if (tx.is_third_party) {
-                        setEditTxCategory("THIRD_PARTY");
-                        setEditTxPersonId(tx.third_party_id || "");
-                      } else if (tx.is_base) {
-                        setEditTxCategory("FIXED");
-                        setEditTxPersonId("");
-                      } else {
-                        setEditTxCategory("PERSONAL");
-                        setEditTxPersonId("");
-                      }
-                      setEditModalOpen(true);
-                    }}
-                    // 1. ADDED: flex items-center justify-center gap-1
-                    className="flex items-center justify-center gap-1 text-[10px] px-3 py-1.5 rounded transition-colors font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 uppercase tracking-wider"
-                  >
-                    {tx.is_third_party ? (
-                      `FOR: ${tx.third_party_name}`
-                    ) : (
-                      <>
-                        {/* 2. FIXED: Removed the stray '}' and adjusted the size to 14px so it matches the 10px text */}
-                        <span className="material-symbols-outlined !text-[14px]">
-                          edit
-                        </span>
-                        EDIT
-                      </>
-                    )}
-                  </button>
-                </div>
-              </li>
-            ))}
+                  <div className="flex flex-col items-end gap-2">
+                    <span
+                      className={`font-bold ${tx.is_third_party ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"}`}
+                    >
+                      - ₡{formatCurrency(Number(tx.amount))}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSelectedTx(tx);
+                        setEditTxMerchant(tx.merchant);
+                        if (tx.is_third_party) {
+                          setEditTxCategory("THIRD_PARTY");
+                          setEditTxPersonId(tx.third_party_id || "");
+                        } else if (tx.is_base) {
+                          setEditTxCategory("FIXED");
+                          setEditTxPersonId("");
+                        } else {
+                          setEditTxCategory("PERSONAL");
+                          setEditTxPersonId("");
+                        }
+                        setEditModalOpen(true);
+                      }}
+                      className="flex items-center justify-center gap-1 text-[10px] px-3 py-1.5 rounded transition-colors font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 uppercase tracking-wider"
+                    >
+                      {tx.is_third_party ? (
+                        `FOR: ${tx.third_party_name}`
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined !text-[14px]">
+                            edit
+                          </span>
+                          EDIT
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </li>
+              ))
+            )}
           </ul>
         </div>
       </div>
@@ -760,6 +967,7 @@ function App() {
                   </label>
                 </div>
               </div>
+              {/* Conditional Select for Third Parties */}
               {editTxCategory === "THIRD_PARTY" && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                   <label className="text-xs font-semibold text-orange-600 dark:text-orange-400 mb-1 block">
@@ -768,17 +976,26 @@ function App() {
                   <select
                     value={editTxPersonId}
                     onChange={(e) => setEditTxPersonId(e.target.value)}
-                    className="border border-orange-300 dark:border-orange-700 rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-orange-500 bg-orange-50 dark:bg-orange-900/20 text-gray-800 dark:text-gray-200"
+                    className="border border-orange-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-orange-500 bg-orange-50 dark:bg-gray-800 text-gray-800 dark:text-white"
                   >
-                    <option value="" disabled>
+                    <option value="" disabled className="dark:bg-gray-800">
                       -- Choose a person --
                     </option>
                     {thirdParties.map((p) => (
-                      <option key={p.id} value={p.id}>
+                      <option
+                        key={p.id}
+                        value={p.id}
+                        className="dark:bg-gray-800"
+                      >
                         {p.name}
                       </option>
                     ))}
                   </select>
+                  {thirdParties.length === 0 && (
+                    <p className="text-xs text-red-500 mt-1">
+                      Please add people in "Manage People" first.
+                    </p>
+                  )}
                 </div>
               )}
               <button
@@ -832,7 +1049,7 @@ function App() {
                   type="date"
                   value={incomeDate}
                   onChange={(e) => setIncomeDate(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500"
+                  className="w-1/2 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [color-scheme:light] dark:[color-scheme:dark] cursor-pointer"
                 />
                 <button
                   onClick={handleSaveIncome}
@@ -944,7 +1161,7 @@ function App() {
                   type="date"
                   value={fixedExpenseDate}
                   onChange={(e) => setFixedExpenseDate(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500"
+                  className="w-1/2 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all [color-scheme:light] dark:[color-scheme:dark] cursor-pointer"
                 />
                 <button
                   onClick={handleSaveFixedExpense}
@@ -1005,6 +1222,138 @@ function App() {
                     </div>
                   </li>
                 ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- NEW MODAL: MANAGE CARDS --- */}
+      {isCardModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <span className="material-symbols-outlined">credit_card</span>{" "}
+                Manage Cards
+              </h2>
+              <button
+                onClick={() => {
+                  setIsCardModalOpen(false);
+                  resetCardForm();
+                }}
+                className="text-gray-400 hover:text-red-500 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Form Section */}
+            <div className="p-5 bg-gray-50 dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 flex flex-col gap-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Card Name (e.g. BAC Millas)"
+                  value={cardName}
+                  onChange={(e) => setCardName(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-indigo-500"
+                />
+                <input
+                  type="text"
+                  placeholder="Last 4 (e.g. 1234)"
+                  maxLength={4}
+                  value={cardLastFour}
+                  onChange={(e) => setCardLastFour(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/4 outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={cardType}
+                  onChange={(e) =>
+                    setCardType(e.target.value as "CREDIT" | "DEBIT")
+                  }
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/3 outline-none focus:border-indigo-500"
+                >
+                  <option value="CREDIT">Credit</option>
+                  <option value="DEBIT">Debit</option>
+                </select>
+                <input
+                  type="number"
+                  placeholder="Cutoff Day (1-31)"
+                  min="1"
+                  max="31"
+                  value={cardCutoff}
+                  onChange={(e) => setCardCutoff(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/3 outline-none focus:border-indigo-500"
+                />
+                <button
+                  onClick={handleSaveCard}
+                  className="w-1/3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg text-sm transition-colors"
+                >
+                  {editingCardId ? "Save" : "Add Card"}
+                </button>
+              </div>
+            </div>
+
+            {/* List Section */}
+            <div className="p-5 overflow-y-auto flex-1">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                Your Cards
+              </h3>
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                {cardsList.map((card) => (
+                  <li
+                    key={card.id}
+                    className="py-3 flex justify-between items-center"
+                  >
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-700 dark:text-gray-200">
+                          {card.name}
+                        </span>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${card.type === "CREDIT" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}
+                        >
+                          {card.type}
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
+                        **** **** **** {card.last_four} • Cutoff: Day{" "}
+                        {card.cutoff_day}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingCardId(card.id);
+                          setCardName(card.name);
+                          setCardLastFour(card.last_four);
+                          setCardType(card.type as "CREDIT" | "DEBIT");
+                          setCardCutoff(card.cutoff_day.toString());
+                        }}
+                        className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
+                      >
+                        <span className="material-symbols-outlined !text-[14px]">
+                          edit
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCard(card.id)}
+                        className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
+                      >
+                        <span className="material-symbols-outlined !text-[14px]">
+                          delete
+                        </span>
+                      </button>
+                    </div>
+                  </li>
+                ))}
+                {cardsList.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-4">
+                    No cards registered yet.
+                  </p>
+                )}
               </ul>
             </div>
           </div>

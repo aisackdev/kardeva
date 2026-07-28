@@ -43,10 +43,12 @@ The content is organized as follows:
 backend/
   src/
     controllers/
+      card.controller.ts
       system.controller.ts
       thirdParty.controller.ts
       transaction.controller.ts
     routes/
+      card.routes.ts
       system.routes.ts
       thirdParty.routes.ts
       transaction.routes.ts
@@ -87,6 +89,172 @@ docker-compose.yml
 <files>
 This section contains the contents of the repository's files.
 
+<file path="backend/src/controllers/card.controller.ts">
+// backend/src/controllers/card.controller.ts
+import type { Request, Response } from "express";
+import { pool } from "../db.js";
+import { broadcast } from "../sse.js";
+
+export const getCards = async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query("SELECT * FROM cards ORDER BY name ASC;");
+    res.status(200).json({ cards: result.rows });
+  } catch (error) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const createCard = async (req: Request, res: Response) => {
+  try {
+    const { name, last_four, type, cutoff_day } = req.body;
+
+    // 1. Create the new card
+    const insertQuery = `
+      INSERT INTO cards (name, last_four, type, cutoff_day) 
+      VALUES ($1, $2, $3, $4) RETURNING *;
+    `;
+    const result = await pool.query(insertQuery, [
+      name,
+      last_four,
+      type,
+      cutoff_day,
+    ]);
+    const newCard = result.rows[0];
+
+    // 2. THE MAGIC: Retroactive Synchronization!
+    // We look for transactions that match the last 4 digits and recalculate their billing_month
+    const syncQuery = `
+      UPDATE transactions 
+      SET 
+        card_id = $1,
+        billing_month = TO_CHAR(
+          date + (CASE WHEN EXTRACT(DAY FROM date) > $2 THEN '1 month'::interval ELSE '0 month'::interval END), 
+          'YYYY-MM'
+        )
+      WHERE card_type LIKE '%' || $3
+      AND card_id IS NULL;
+    `;
+
+    await pool.query(syncQuery, [newCard.id, cutoff_day, last_four]);
+
+    // 3. Shout through the radio that things changed so React reloads the math!
+    broadcast("transaction_updated", {});
+
+    res.status(201).json({
+      message: "Card created and old transactions synced!",
+      card: newCard,
+    });
+  } catch (error: any) {
+    if (error.code === "23505")
+      return res
+        .status(409)
+        .json({ error: "A card with this last 4 digits already exists." });
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const deleteCard = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // 1. THE LOGIC: Revert the billing_month of all transactions tied to this card back to their original date
+    const revertQuery = `
+      UPDATE transactions 
+      SET billing_month = TO_CHAR(date, 'YYYY-MM') 
+      WHERE card_id = $1;
+    `;
+    await pool.query(revertQuery, [id]);
+
+    // 2. Now it's safe to delete the card (Postgres will auto-set card_id to NULL thanks to our ON DELETE SET NULL rule)
+    await pool.query("DELETE FROM cards WHERE id = $1", [id]);
+
+    // 3. Shout through the radio that things changed so React reloads the math!
+    broadcast("transaction_updated", {});
+
+    res
+      .status(200)
+      .json({ message: "Card deleted and transactions reverted successfully" });
+  } catch (error) {
+    console.error("Error deleting card:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const updateCard = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name, last_four, type, cutoff_day } = req.body;
+
+    // 1. Update the card details
+    const updateQuery = `
+      UPDATE cards 
+      SET name = $1, last_four = $2, type = $3, cutoff_day = $4 
+      WHERE id = $5 
+      RETURNING *;
+    `;
+    const result = await pool.query(updateQuery, [
+      name,
+      last_four,
+      type,
+      cutoff_day,
+      id,
+    ]);
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: "Card not found" });
+      return;
+    }
+
+    // 2. THE MAGIC: Recalculate billing_month for all transactions belonging to this card
+    // Just in case the user changed the cutoff_day!
+    const syncQuery = `
+      UPDATE transactions 
+      SET 
+        billing_month = TO_CHAR(
+          date + (CASE WHEN EXTRACT(DAY FROM date) > $1 THEN '1 month'::interval ELSE '0 month'::interval END), 
+          'YYYY-MM'
+        )
+      WHERE card_id = $2;
+    `;
+    await pool.query(syncQuery, [cutoff_day, id]);
+
+    // 3. Tell React to refresh the UI because the math might have changed
+    broadcast("transaction_updated", {});
+
+    res
+      .status(200)
+      .json({ message: "Card updated successfully", card: result.rows[0] });
+  } catch (error: any) {
+    if (error.code === "23505") {
+      res
+        .status(409)
+        .json({ error: "A card with this last 4 digits already exists." });
+      return;
+    }
+    console.error("Error updating card:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+</file>
+
+<file path="backend/src/routes/card.routes.ts">
+import { Router } from "express";
+import {
+  getCards,
+  createCard,
+  deleteCard,
+  updateCard,
+} from "../controllers/card.controller.js";
+
+const router = Router();
+router.get("/", getCards);
+router.post("/", createCard);
+router.put("/:id", updateCard);
+router.delete("/:id", deleteCard);
+
+export default router;
+</file>
+
 <file path="backend/src/controllers/system.controller.ts">
 import type { Request, Response } from "express";
 import { pool } from "../db.js";
@@ -107,112 +275,6 @@ export const getDatabaseStatus = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.log("There was an error consulting the database", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
-</file>
-
-<file path="backend/src/controllers/thirdParty.controller.ts">
-import type { Request, Response } from "express";
-import { pool } from "../db.js";
-
-// Get all third parties to show them in a dropdown in React
-export const getThirdParties = async (req: Request, res: Response) => {
-  try {
-    const selectQuery = "SELECT * FROM third_parties ORDER BY name ASC;";
-    const result = await pool.query(selectQuery);
-
-    res.status(200).json({ thirdParties: result.rows });
-  } catch (error) {
-    console.error("Error fetching third parties:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
-
-// Add a new third party (e.g. "Mom", "Brother")
-export const createThirdParty = async (req: Request, res: Response) => {
-  try {
-    const { name } = req.body;
-
-    const insertQuery = `
-      INSERT INTO third_parties (name) 
-      VALUES ($1) 
-      RETURNING *;
-    `;
-
-    const result = await pool.query(insertQuery, [name]);
-
-    res.status(201).json({
-      message: "Third party added successfully",
-      thirdParty: result.rows[0],
-    });
-  } catch (error: any) {
-    console.error("Error creating third party:", error);
-
-    // Postgres code 23505 means UNIQUE constraint violation
-    if (error.code === "23505") {
-      res.status(409).json({ error: "This name already exists." });
-      return;
-    }
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
-
-// NEW: Update a person's name
-export const updateThirdParty = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const { name } = req.body;
-
-    const updateQuery = `
-      UPDATE third_parties 
-      SET name = $1 
-      WHERE id = $2 
-      RETURNING *;
-    `;
-    const result = await pool.query(updateQuery, [name, id]);
-
-    if (result.rowCount === 0) {
-      res.status(404).json({ error: "Person not found" });
-      return;
-    }
-
-    res.status(200).json({ thirdParty: result.rows[0] });
-  } catch (error: any) {
-    if (error.code === "23505") {
-      res.status(409).json({ error: "This name already exists." });
-      return;
-    }
-    console.error("Error updating third party:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
-
-// NEW: Delete a person
-export const deleteThirdParty = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-
-    // 1. NEW: Before deleting the person, revert their transactions to personal expenses
-    const revertTransactionsQuery = `
-      UPDATE transactions 
-      SET is_third_party = false 
-      WHERE third_party_id = $1;
-    `;
-    await pool.query(revertTransactionsQuery, [id]);
-
-    // 2. Now it's safe to delete the person
-    const deleteQuery = "DELETE FROM third_parties WHERE id = $1 RETURNING *;";
-    const result = await pool.query(deleteQuery, [id]);
-
-    if (result.rowCount === 0) {
-      res.status(404).json({ error: "Person not found" });
-      return;
-    }
-
-    res.status(200).json({ message: "Person deleted successfully" });
-  } catch (error) {
-    console.error("Error deleting third party:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -416,10 +478,6 @@ CMD ["npm", "run", "dev"]
 </svg>
 </file>
 
-<file path="frontend/src/index.css">
-@import "tailwindcss";
-</file>
-
 <file path="frontend/src/main.tsx">
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -491,22 +549,6 @@ export default defineConfig([
     },
   },
 ])
-</file>
-
-<file path="frontend/index.html">
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
 </file>
 
 <file path="frontend/README.md">
@@ -730,68 +772,115 @@ volumes:
   postgres_data:
 </file>
 
-<file path="backend/src/db.ts">
-import pg from "pg";
+<file path="backend/src/controllers/thirdParty.controller.ts">
+import type { Request, Response } from "express";
+import { pool } from "../db.js";
 
-const { Pool } = pg;
-
-export const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: parseInt(process.env.DB_PORT || "5432", 10),
-});
-
-export const initDB = async () => {
-  // 1. We create the tables ONLY if they don't exist (No more dropping!)
-  const createThirdPartiesTableQuery = `
-    CREATE TABLE IF NOT EXISTS third_parties (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      name VARCHAR(100) NOT NULL UNIQUE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `;
-
-  const createTransactionsTableQuery = `
-    CREATE TABLE IF NOT EXISTS transactions (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      merchant VARCHAR(255) NOT NULL,
-      location VARCHAR(255),
-      date TIMESTAMP NOT NULL,
-      card_type VARCHAR(50) NOT NULL,
-      auth_code VARCHAR(100) UNIQUE NOT NULL,
-      amount DECIMAL(12, 2) NOT NULL,
-      is_third_party BOOLEAN DEFAULT FALSE,
-      third_party_id UUID REFERENCES third_parties(id) ON DELETE SET NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-  `;
-
-  // 2. NEW: We use ALTER TABLE to safely add the new column to existing databases
-  const addColumnsQuery = `
-    ALTER TABLE transactions 
-    ADD COLUMN IF NOT EXISTS type VARCHAR(20) DEFAULT 'EXPENSE',
-    ADD COLUMN IF NOT EXISTS is_base BOOLEAN DEFAULT FALSE;
-  `;
-
+// Get all third parties to show them in a dropdown in React
+export const getThirdParties = async (req: Request, res: Response) => {
   try {
-    await pool.query(createThirdPartiesTableQuery);
-    await pool.query(createTransactionsTableQuery);
-    await pool.query(addColumnsQuery); // Run the migration
-    console.log("✅ Database tables and migrations applied successfully.");
+    const selectQuery = "SELECT * FROM third_parties ORDER BY name ASC;";
+    const result = await pool.query(selectQuery);
+
+    res.status(200).json({ thirdParties: result.rows });
   } catch (error) {
-    console.error("❌ Error setting up database:", error);
+    console.error("Error fetching third parties:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
-pool.on("connect", () => {
-  console.log("✅ Conection established sucessfully with PostgreSQL database");
-});
+// Add a new third party (e.g. "Mom", "Brother")
+export const createThirdParty = async (req: Request, res: Response) => {
+  try {
+    const { name } = req.body;
 
-pool.on("error", (err) => {
-  console.error("❌ Unexpected error on the database client", err);
-});
+    const insertQuery = `
+      INSERT INTO third_parties (name) 
+      VALUES ($1) 
+      RETURNING *;
+    `;
+
+    const result = await pool.query(insertQuery, [name]);
+
+    res.status(201).json({
+      message: "Third party added successfully",
+      thirdParty: result.rows[0],
+    });
+  } catch (error: any) {
+    console.error("Error creating third party:", error);
+
+    // Postgres code 23505 means UNIQUE constraint violation
+    if (error.code === "23505") {
+      res.status(409).json({ error: "This name already exists." });
+      return;
+    }
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+// NEW: Update a person's name
+export const updateThirdParty = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    const updateQuery = `
+      UPDATE third_parties 
+      SET name = $1 
+      WHERE id = $2 
+      RETURNING *;
+    `;
+    const result = await pool.query(updateQuery, [name, id]);
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: "Person not found" });
+      return;
+    }
+
+    res.status(200).json({ thirdParty: result.rows[0] });
+  } catch (error: any) {
+    if (error.code === "23505") {
+      res.status(409).json({ error: "This name already exists." });
+      return;
+    }
+    console.error("Error updating third party:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+// NEW: Delete a person
+export const deleteThirdParty = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // 1. NEW: Before deleting the person, revert their transactions to personal expenses
+    const revertTransactionsQuery = `
+      UPDATE transactions 
+      SET is_third_party = false 
+      WHERE third_party_id = $1;
+    `;
+    await pool.query(revertTransactionsQuery, [id]);
+
+    // 2. Now it's safe to delete the person
+    const deleteQuery = "DELETE FROM third_parties WHERE id = $1 RETURNING *;";
+    const result = await pool.query(deleteQuery, [id]);
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ error: "Person not found" });
+      return;
+    }
+
+    res.status(200).json({ message: "Person deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting third party:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+</file>
+
+<file path="frontend/src/index.css">
+@import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
 </file>
 
 <file path="frontend/.gitignore">
@@ -822,6 +911,26 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+</file>
+
+<file path="frontend/index.html">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>frontend</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+    />
+  </head>
+  <body class="bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
 </file>
 
 <file path="frontend/package.json">
@@ -890,14 +999,178 @@ postgres_data/
 .idea/
 </file>
 
+<file path="backend/src/db.ts">
+import pg from "pg";
+
+const { Pool } = pg;
+
+export const pool = new Pool({
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port: parseInt(process.env.DB_PORT || "5432", 10),
+});
+
+export const initDB = async () => {
+  const createThirdPartiesTableQuery = `
+    CREATE TABLE IF NOT EXISTS third_parties (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(100) NOT NULL UNIQUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createTransactionsTableQuery = `
+    CREATE TABLE IF NOT EXISTS transactions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      merchant VARCHAR(255) NOT NULL,
+      location VARCHAR(255),
+      date TIMESTAMP NOT NULL,
+      card_type VARCHAR(50) NOT NULL,
+      auth_code VARCHAR(100) UNIQUE NOT NULL,
+      amount DECIMAL(12, 2) NOT NULL,
+      is_third_party BOOLEAN DEFAULT FALSE,
+      third_party_id UUID REFERENCES third_parties(id) ON DELETE SET NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const createCardsTableQuery = `
+    CREATE TABLE IF NOT EXISTS cards (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(100) NOT NULL,
+      last_four VARCHAR(4) NOT NULL UNIQUE,
+      type VARCHAR(20) NOT NULL, -- 'CREDIT' or 'DEBIT'
+      cutoff_day INTEGER NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
+  const addColumnsQuery = `
+    ALTER TABLE transactions 
+    ADD COLUMN IF NOT EXISTS type VARCHAR(20) DEFAULT 'EXPENSE',
+    ADD COLUMN IF NOT EXISTS is_base BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS billing_month VARCHAR(7),
+    ADD COLUMN IF NOT EXISTS card_id UUID REFERENCES cards(id) ON DELETE SET NULL;
+  `;
+
+  const backfillBillingMonthQuery = `
+    UPDATE transactions 
+    SET billing_month = TO_CHAR(date, 'YYYY-MM') 
+    WHERE billing_month IS NULL;
+  `;
+
+  try {
+    await pool.query(createThirdPartiesTableQuery);
+    await pool.query(createTransactionsTableQuery);
+    await pool.query(createCardsTableQuery);
+    await pool.query(addColumnsQuery);
+    await pool.query(backfillBillingMonthQuery);
+    console.log("✅ Database tables and migrations applied successfully.");
+  } catch (error) {
+    console.error("❌ Error setting up database:", error);
+  }
+};
+
+pool.on("connect", () => {
+  console.log("✅ Conection established sucessfully with PostgreSQL database");
+});
+
+pool.on("error", (err) => {
+  console.error("❌ Unexpected error on the database client", err);
+});
+</file>
+
+<file path="backend/src/index.ts">
+import "dotenv/config";
+import express from "express";
+import cors from "cors";
+import systemRoutes from "./routes/system.routes.js";
+import transactionRoutes from "./routes/transaction.routes.js";
+import thirdPartyRoutes from "./routes/thirdParty.routes.js";
+import cardRoutes from "./routes/card.routes.js";
+import { initDB } from "./db.js";
+import { addClient, removeClient } from "./sse.js";
+
+const app = express();
+const PORT = parseInt(process.env.PORT || "3000", 10);
+
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+  }),
+);
+
+app.use(express.json());
+
+// Routes
+app.use("/", systemRoutes);
+app.use("/api/transactions", transactionRoutes);
+app.use("/api/third-parties", thirdPartyRoutes);
+app.use("/api/cards", cardRoutes);
+
+app.get("/api/stream", (req, res) => {
+  // Required headers for SSE
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders(); // Establish the connection immediately
+
+  addClient(res); // Add user to our list
+  console.log("Client connected to SSE stream");
+
+  // If user closes the browser, remove them from the list
+  req.on("close", () => {
+    removeClient(res);
+    console.log("Client disconnected");
+  });
+});
+
+await initDB();
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});
+</file>
+
 <file path="backend/src/controllers/transaction.controller.ts">
 import type { Request, Response } from "express";
 import { pool } from "../db.js";
 import { broadcast } from "../sse.js";
 
+const getMonthFilter = (req: Request) => {
+  return (
+    (req.query.month as string) || new Date().toISOString().substring(0, 7)
+  );
+};
+
+// NEW: The brain of our billing system
+const calculateBillingMonth = (
+  dateString: string,
+  cutoffDay: number | null,
+): string => {
+  const date = new Date(dateString);
+  let year = date.getFullYear();
+  let month = date.getMonth() + 1; // JavaScript months are 0-11
+  const day = date.getDate();
+
+  // If we have a cutoff day and the purchase day is AFTER the cutoff, shift to next month!
+  if (cutoffDay && day > cutoffDay) {
+    month++;
+    if (month > 12) {
+      month = 1;
+      year++;
+    }
+  }
+
+  // Format back to YYYY-MM
+  return `${year}-${month.toString().padStart(2, "0")}`;
+};
+
 export const createTransaction = async (req: Request, res: Response) => {
   try {
-    // 1. We extract the data from the request body (req.body)
+    // We extract the data from the request body (req.body)
     const {
       merchant,
       location,
@@ -911,13 +1184,34 @@ export const createTransaction = async (req: Request, res: Response) => {
       is_base,
     } = req.body;
 
-    // 2. We write the SQL query using placeholders ($1, $2, etc.) for security
+    // Extract the last 4 digits from the card_type string (e.g. "VISA *1234" -> "1234")
+    const lastFourMatch = card_type ? card_type.match(/\d{4}$/) : null;
+    const lastFour = lastFourMatch ? lastFourMatch[0] : null;
+
+    let cutoffDay = null;
+    let cardId = null;
+
+    // If we found 4 digits, check if we have a card saved with those digits
+    if (lastFour) {
+      const cardResult = await pool.query(
+        "SELECT id, cutoff_day FROM cards WHERE last_four = $1",
+        [lastFour],
+      );
+      if (cardResult.rows.length > 0) {
+        cardId = cardResult.rows[0].id;
+        cutoffDay = cardResult.rows[0].cutoff_day;
+      }
+    }
+
+    // Let the brain calculate the billing month!
+    const billingMonth = calculateBillingMonth(date, cutoffDay);
+
+    // Save everything
     const insertQuery = `
-      INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, is_third_party, third_party_id, type, is_base)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, is_third_party, third_party_id, type, is_base, billing_month, card_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *; 
     `;
-    // 'RETURNING *' tells Postgres to give us back the row it just created
 
     const values = [
       merchant,
@@ -926,19 +1220,21 @@ export const createTransaction = async (req: Request, res: Response) => {
       card_type,
       auth_code,
       amount,
-      is_third_party || false, // Default to false if not provided
-      third_party_id || null, // Default to null if not provided
+      is_third_party || false,
+      third_party_id || null,
       type || "EXPENSE",
       is_base || false,
+      billingMonth,
+      cardId,
     ];
 
-    // 3. We execute the query
+    // We execute the query
     const result = await pool.query(insertQuery, values);
     const newTransaction = result.rows[0];
 
     broadcast("new_transaction", newTransaction);
 
-    // 4. We send the created transaction back to the client with a 201 Created status
+    // We send the created transaction back to the client with a 201 Created status
     res.status(201).json({
       message: "Transaction created successfully",
       transaction: result.rows[0],
@@ -960,20 +1256,19 @@ export const createTransaction = async (req: Request, res: Response) => {
 
 export const getTransactions = async (req: Request, res: Response) => {
   try {
+    const month = getMonthFilter(req);
+
     const selectQuery = `
       SELECT t.*, p.name as third_party_name 
       FROM transactions t
       LEFT JOIN third_parties p ON t.third_party_id = p.id
-      WHERE t.type = 'EXPENSE' AND t.is_base = false
+      WHERE t.type = 'EXPENSE' AND t.is_base = false AND t.billing_month = $1
       ORDER BY t.date DESC 
-      LIMIT 15; 
+      LIMIT 7; 
     `;
 
-    const result = await pool.query(selectQuery);
-
-    res.status(200).json({
-      transactions: result.rows,
-    });
+    const result = await pool.query(selectQuery, [month]);
+    res.status(200).json({ transactions: result.rows });
   } catch (error) {
     console.error("Error fetching transactions:", error);
     res.status(500).json({ error: "Internal Server Error" });
@@ -982,6 +1277,7 @@ export const getTransactions = async (req: Request, res: Response) => {
 
 export const getSummary = async (req: Request, res: Response) => {
   try {
+    const month = getMonthFilter(req);
     const summaryQuery = `
       SELECT 
         COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = false), 0) AS personal_expenses,
@@ -989,19 +1285,20 @@ export const getSummary = async (req: Request, res: Response) => {
         COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = true), 0) AS third_party_expenses,
         COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME' AND is_base = true), 0) AS base_income,
         COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME' AND is_base = false), 0) AS extra_income
-      FROM transactions;
+      FROM transactions
+      WHERE billing_month = $1;
     `;
 
-    const result = await pool.query(summaryQuery);
+    const result = await pool.query(summaryQuery, [month]);
     const personal = parseFloat(result.rows[0].personal_expenses);
-    const fixed = parseFloat(result.rows[0].fixed_expenses); // <-- NEW
+    const fixed = parseFloat(result.rows[0].fixed_expenses);
     const thirdParty = parseFloat(result.rows[0].third_party_expenses);
     const baseIncome = parseFloat(result.rows[0].base_income);
     const extraIncome = parseFloat(result.rows[0].extra_income);
 
     res.status(200).json({
       personalExpenses: personal,
-      fixedExpenses: fixed, // <-- NEW
+      fixedExpenses: fixed,
       thirdPartyExpenses: thirdParty,
       baseIncome,
       extraIncome,
@@ -1014,21 +1311,20 @@ export const getSummary = async (req: Request, res: Response) => {
 
 export const getChartData = async (req: Request, res: Response) => {
   try {
-    // We use TO_CHAR to format the date as 'YYYY-MM-DD' and group by it
+    const month = getMonthFilter(req);
+
     const chartQuery = `
       SELECT 
         TO_CHAR(date, 'YYYY-MM-DD') as day,
         SUM(amount) as total
       FROM transactions
-      WHERE type = 'EXPENSE'
+      WHERE type = 'EXPENSE' AND billing_month = $1
       GROUP BY TO_CHAR(date, 'YYYY-MM-DD')
       ORDER BY day ASC
       LIMIT 7;
     `;
 
-    const result = await pool.query(chartQuery);
-
-    // Parse the total from string to number (Postgres SUM returns a string)
+    const result = await pool.query(chartQuery, [month]);
     const formattedData = result.rows.map((row) => ({
       day: row.day,
       total: parseFloat(row.total),
@@ -1083,8 +1379,9 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
 
 export const getIncomes = async (req: Request, res: Response) => {
   try {
-    const selectQuery = `SELECT * FROM transactions WHERE type = 'INCOME' ORDER BY date DESC;`;
-    const result = await pool.query(selectQuery);
+    const month = getMonthFilter(req);
+    const selectQuery = `SELECT * FROM transactions WHERE type = 'INCOME' AND billing_month = $1 ORDER BY date DESC;`;
+    const result = await pool.query(selectQuery, [month]);
     res.status(200).json({ incomes: result.rows });
   } catch (error) {
     res.status(500).json({ error: "Internal Server Error" });
@@ -1094,10 +1391,45 @@ export const getIncomes = async (req: Request, res: Response) => {
 export const deleteTransaction = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await pool.query("DELETE FROM transactions WHERE id = $1", [id]);
-    broadcast("transaction_deleted", { id });
-    res.status(200).json({ message: "Deleted successfully" });
+
+    // 1. Fetch the transaction to check its origin (auth_code)
+    const checkQuery = "SELECT auth_code FROM transactions WHERE id = $1";
+    const checkResult = await pool.query(checkQuery, [id]);
+
+    if (checkResult.rowCount === 0) {
+      res.status(404).json({ error: "Transaction not found" });
+      return;
+    }
+
+    const authCode = checkResult.rows[0].auth_code;
+
+    // 2. If it was created manually (starts with FIX- or INC-), delete it completely
+    if (authCode.startsWith("FIX-") || authCode.startsWith("INC-")) {
+      await pool.query("DELETE FROM transactions WHERE id = $1", [id]);
+
+      broadcast("transaction_deleted", { id });
+      res.status(200).json({ message: "Deleted successfully" });
+    }
+    // 3. If it comes from the bank, DO NOT delete it. Revert it to a normal expense!
+    else {
+      const revertQuery = `
+        UPDATE transactions 
+        SET is_base = false, is_third_party = false, third_party_id = null, type = 'EXPENSE'
+        WHERE id = $1 
+        RETURNING *;
+      `;
+      const updateResult = await pool.query(revertQuery, [id]);
+
+      // We broadcast an UPDATE instead of a DELETE
+      broadcast("transaction_updated", updateResult.rows[0]);
+
+      res.status(200).json({
+        message: "Reverted to normal transaction",
+        transaction: updateResult.rows[0],
+      });
+    }
   } catch (error) {
+    console.error("Error handling transaction deletion:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -1135,8 +1467,9 @@ export const updateTransactionDetails = async (req: Request, res: Response) => {
 
 export const getFixedExpenses = async (req: Request, res: Response) => {
   try {
-    const selectQuery = `SELECT * FROM transactions WHERE type = 'EXPENSE' AND is_base = true ORDER BY date DESC;`;
-    const result = await pool.query(selectQuery);
+    const month = getMonthFilter(req);
+    const selectQuery = `SELECT * FROM transactions WHERE type = 'EXPENSE' AND is_base = true AND billing_month = $1 ORDER BY date DESC;`;
+    const result = await pool.query(selectQuery, [month]);
     res.status(200).json({ fixedExpenses: result.rows });
   } catch (error) {
     res.status(500).json({ error: "Internal Server Error" });
@@ -1167,61 +1500,11 @@ router.get("/fixed-expenses", getFixedExpenses);
 
 router.post("/", createTransaction);
 router.get("/", getTransactions);
-router.patch("/:id/assign", updateRecentTransaction);
+router.patch("/:id/edit", updateRecentTransaction);
 router.put("/:id", updateTransactionDetails);
 router.delete("/:id", deleteTransaction);
 
 export default router;
-</file>
-
-<file path="backend/src/index.ts">
-import "dotenv/config";
-import express from "express";
-import cors from "cors";
-import systemRoutes from "./routes/system.routes.js";
-import transactionRoutes from "./routes/transaction.routes.js";
-import thirdPartyRoutes from "./routes/thirdParty.routes.js";
-import { initDB } from "./db.js";
-import { addClient, removeClient } from "./sse.js";
-
-const app = express();
-const PORT = parseInt(process.env.PORT || "3000", 10);
-
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-  }),
-);
-
-app.use(express.json());
-
-// Routes
-app.use("/", systemRoutes);
-app.use("/api/transactions", transactionRoutes);
-app.use("/api/third-parties", thirdPartyRoutes);
-
-app.get("/api/stream", (req, res) => {
-  // Required headers for SSE
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders(); // Establish the connection immediately
-
-  addClient(res); // Add user to our list
-  console.log("Client connected to SSE stream");
-
-  // If user closes the browser, remove them from the list
-  req.on("close", () => {
-    removeClient(res);
-    console.log("Client disconnected");
-  });
-});
-
-await initDB();
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on port ${PORT}`);
-});
 </file>
 
 <file path="frontend/src/types/index.ts">
@@ -1254,12 +1537,19 @@ export interface ThirdParty {
   id: string;
   name: string;
 }
+
+export interface Card {
+  id: string;
+  name: string;
+  last_four: string;
+  type: string;
+  cutoff_day: number;
+}
 </file>
 
 <file path="frontend/src/App.tsx">
-// frontend/src/App.tsx
 import { useEffect, useState } from "react";
-import type { Transaction, ChartData, ThirdParty } from "./types";
+import type { Transaction, ChartData, ThirdParty, Card } from "./types";
 import {
   BarChart,
   Bar,
@@ -1277,14 +1567,12 @@ function App() {
   const [thirdPartyExpenses, setThirdPartyExpenses] = useState<number>(0);
   const [fixedExpenses, setFixedExpenses] = useState<number>(0);
 
-  // Third Parties & Modal States
   const [thirdParties, setThirdParties] = useState<ThirdParty[]>([]);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [newPersonName, setNewPersonName] = useState<string>("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState<string>("");
 
-  // NEW: Edit Recent Transaction Modal States
   const [editModalOpen, setEditModalOpen] = useState<boolean>(false);
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [editTxMerchant, setEditTxMerchant] = useState<string>("");
@@ -1293,7 +1581,6 @@ function App() {
   >("PERSONAL");
   const [editTxPersonId, setEditTxPersonId] = useState<string>("");
 
-  // Income States
   const [incomeSource, setIncomeSource] = useState<string>("");
   const [incomeAmount, setIncomeAmount] = useState<string>("");
 
@@ -1306,14 +1593,11 @@ function App() {
     thirdPartyExpenses -
     fixedExpenses;
 
-  // New Income Modal States
   const [incomesList, setIncomesList] = useState<Transaction[]>([]);
   const [isIncomeModalOpen, setIsIncomeModalOpen] = useState<boolean>(false);
   const [isBaseIncome, setIsBaseIncome] = useState<boolean>(true);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
 
-  // NEW: State for the date. We use a helper to get today in 'YYYY-MM-DD' format
-  // NEW: Robust local date generator (Fixes the 6:00 PM UTC bug)
   const getTodayDate = () => {
     const now = new Date();
     const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
@@ -1321,7 +1605,6 @@ function App() {
   };
   const [incomeDate, setIncomeDate] = useState<string>(getTodayDate());
 
-  // NEW: Fixed Expenses Modal States
   const [fixedExpensesList, setFixedExpensesList] = useState<Transaction[]>([]);
   const [isFixedModalOpen, setIsFixedModalOpen] = useState<boolean>(false);
   const [fixedExpenseName, setFixedExpenseName] = useState<string>("");
@@ -1330,11 +1613,52 @@ function App() {
   const [fixedExpenseDate, setFixedExpenseDate] =
     useState<string>(getTodayDate());
 
+  // NEW: State for the global month filter (Default to current YYYY-MM)
+  const getCurrentMonth = () => {
+    const now = new Date();
+    const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    return localNow.toISOString().substring(0, 7); // Extracts "YYYY-MM"
+  };
+  const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonth());
+
+  // NEW: Cards Modal States
+  const [cardsList, setCardsList] = useState<Card[]>([]);
+  const [isCardModalOpen, setIsCardModalOpen] = useState<boolean>(false);
+  const [cardName, setCardName] = useState<string>("");
+  const [cardLastFour, setCardLastFour] = useState<string>("");
+  const [cardType, setCardType] = useState<"CREDIT" | "DEBIT">("CREDIT");
+  const [cardCutoff, setCardCutoff] = useState<string>("");
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+
+  // --- NEW: DARK MODE LOGIC ---
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    // Check if user has a preference saved in their browser
+    if (typeof window !== "undefined") {
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme) return savedTheme === "dark";
+      // If no preference, check system settings
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    // Apply the class to the root <html> element based on state
+    const root = document.documentElement;
+    if (isDarkMode) {
+      root.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      root.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [isDarkMode]);
+  // ----------------------------
+
   // --- API FETCHING ---
   const fetchChartData = () => {
-    /* same as before */
     const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/chart`)
+    fetch(`${apiUrl}/api/transactions/chart?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.chartData) setChartData(data.chartData);
@@ -1342,9 +1666,8 @@ function App() {
   };
 
   const fetchTransactions = () => {
-    /* same as before */
     const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions`)
+    fetch(`${apiUrl}/api/transactions?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.transactions) setTransactions(data.transactions);
@@ -1353,12 +1676,12 @@ function App() {
 
   const fetchSummary = () => {
     const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/summary`)
+    fetch(`${apiUrl}/api/transactions/summary?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.personalExpenses !== undefined) {
           setPersonalExpenses(data.personalExpenses);
-          setFixedExpenses(data.fixedExpenses); // <-- NEW
+          setFixedExpenses(data.fixedExpenses);
           setThirdPartyExpenses(data.thirdPartyExpenses);
           setBaseIncome(data.baseIncome);
           setExtraIncome(data.extraIncome);
@@ -1366,17 +1689,15 @@ function App() {
       });
   };
 
-  // NEW: Fetch Fixed Expenses
   const fetchFixedExpenses = () => {
     const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/fixed-expenses`)
+    fetch(`${apiUrl}/api/transactions/fixed-expenses?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.fixedExpenses) setFixedExpensesList(data.fixedExpenses);
       });
   };
 
-  // NEW: Save Fixed Expense
   const handleSaveFixedExpense = () => {
     if (!fixedExpenseName.trim() || !fixedExpenseAmount) return;
     const apiUrl = import.meta.env.VITE_API_URL;
@@ -1421,7 +1742,6 @@ function App() {
   };
 
   const fetchThirdParties = () => {
-    /* same as before */
     const apiUrl = import.meta.env.VITE_API_URL;
     fetch(`${apiUrl}/api/third-parties`)
       .then((res) => res.json())
@@ -1432,60 +1752,112 @@ function App() {
 
   const fetchIncomes = () => {
     const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/incomes`)
+    fetch(`${apiUrl}/api/transactions/incomes?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.incomes) setIncomesList(data.incomes);
       });
   };
 
-  useEffect(() => {
+  // NEW: Fetch Cards
+  const fetchCards = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/cards`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.cards) setCardsList(data.cards);
+      });
+  };
+
+  // NEW: Save Card
+  const handleSaveCard = () => {
+    if (!cardName.trim() || !cardLastFour.trim() || !cardCutoff) return;
     const apiUrl = import.meta.env.VITE_API_URL;
 
+    if (editingCardId) {
+      // EDIT MODE
+      fetch(`${apiUrl}/api/cards/${editingCardId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cardName,
+          last_four: cardLastFour,
+          type: cardType,
+          cutoff_day: Number(cardCutoff),
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.error) alert(data.error);
+          else resetCardForm();
+        });
+    } else {
+      // ADD MODE
+      fetch(`${apiUrl}/api/cards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cardName,
+          last_four: cardLastFour,
+          type: cardType,
+          cutoff_day: Number(cardCutoff),
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.error) alert(data.error);
+          else resetCardForm();
+        });
+    }
+  };
+
+  const resetCardForm = () => {
+    setCardName("");
+    setCardLastFour("");
+    setCardType("CREDIT");
+    setCardCutoff("");
+    setEditingCardId(null);
+    fetchCards();
+  };
+
+  const handleDeleteCard = (id: string) => {
+    if (!confirm("Delete this card?")) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/cards/${id}`, { method: "DELETE" }).then(() =>
+      fetchCards(),
+    );
+  };
+
+  useEffect(() => {
+    const apiUrl = import.meta.env.VITE_API_URL;
     fetchTransactions();
     fetchSummary();
     fetchChartData();
     fetchThirdParties();
     fetchIncomes();
     fetchFixedExpenses();
+    fetchCards();
 
-    // Connect to the SSE Stream (Radio)
     const eventSource = new EventSource(`${apiUrl}/api/stream`);
 
-    // Channel 1: When something is created (POST)
-    eventSource.addEventListener("new_transaction", () => {
+    const updateAll = () => {
       fetchTransactions();
       fetchSummary();
       fetchChartData();
       fetchIncomes();
       fetchFixedExpenses();
-    });
+      fetchCards();
+    };
 
-    // Channel 2: When something is edited (PUT / PATCH)
-    eventSource.addEventListener("transaction_updated", () => {
-      fetchTransactions();
-      fetchSummary();
-      fetchChartData();
-      fetchIncomes();
-      fetchFixedExpenses();
-    });
+    eventSource.addEventListener("new_transaction", updateAll);
+    eventSource.addEventListener("transaction_updated", updateAll);
+    eventSource.addEventListener("transaction_deleted", updateAll);
 
-    // Channel 3: NEW! When something is deleted (DELETE)
-    eventSource.addEventListener("transaction_deleted", () => {
-      fetchTransactions();
-      fetchSummary();
-      fetchChartData();
-      fetchIncomes();
-      fetchFixedExpenses();
-    });
-
-    // 3. Cleanup on close
     return () => {
       eventSource.close();
     };
-  }, []);
+  }, [selectedMonth]);
 
-  // --- THIRD PARTY CRUD ---
   const handleAddPerson = () => {
     if (!newPersonName.trim()) return;
     const apiUrl = import.meta.env.VITE_API_URL;
@@ -1519,7 +1891,7 @@ function App() {
           setEditingId(null);
           fetchThirdParties();
           fetchTransactions();
-        } // Re-fetch transactions to update names!
+        }
       });
   };
 
@@ -1540,42 +1912,12 @@ function App() {
     );
   };
 
-  // --- HELPERS ---
-  const simulateGoogleScript = () => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    const isThirdParty = Math.random() > 0.7 && thirdParties.length > 0;
-    const randomPerson = isThirdParty
-      ? thirdParties[Math.floor(Math.random() * thirdParties.length)]
-      : null;
-
-    // Simulating dirty bank locations
-    const locations = [" , San Jose", "Heredia", " , Cartago ", "Online"];
-
-    fetch(`${apiUrl}/api/transactions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        merchant: "Store " + Math.floor(Math.random() * 100),
-        location: locations[Math.floor(Math.random() * locations.length)],
-        date: new Date().toISOString(),
-        card_type: "Visa",
-        auth_code: `AUTH-${Math.floor(Math.random() * 1000000)}`,
-        amount: 1500,
-        is_third_party: isThirdParty,
-        third_party_id: randomPerson ? randomPerson.id : null,
-      }),
-    });
-  };
-
   const handleSaveRecentTx = () => {
     if (!selectedTx || !editTxMerchant.trim()) return;
-
-    // If third party is selected, ensure a person is chosen
     if (editTxCategory === "THIRD_PARTY" && !editTxPersonId) {
       alert("Please select a person.");
       return;
     }
-
     const apiUrl = import.meta.env.VITE_API_URL;
 
     fetch(`${apiUrl}/api/transactions/${selectedTx.id}/edit`, {
@@ -1594,13 +1936,11 @@ function App() {
     });
   };
 
-  // Add Extra Income Function
   const handleSaveIncome = () => {
     if (!incomeSource.trim() || !incomeAmount) return;
     const apiUrl = import.meta.env.VITE_API_URL;
 
     if (editingIncomeId) {
-      // EDIT MODE
       fetch(`${apiUrl}/api/transactions/${editingIncomeId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -1608,15 +1948,14 @@ function App() {
           merchant: incomeSource,
           amount: Number(incomeAmount),
           is_base: isBaseIncome,
-          date: incomeDate, // <-- Add date to the update request
+          date: incomeDate,
         }),
       }).then(() => resetIncomeForm());
     } else {
-      // ADD MODE
       const newIncome = {
         merchant: incomeSource,
         location: "Direct",
-        date: incomeDate, // <-- Add our selected date instead of generating a fixed one!
+        date: incomeDate,
         card_type: "TRANSFER",
         auth_code: `INC-${Math.floor(Math.random() * 1000000)}`,
         amount: Number(incomeAmount),
@@ -1624,7 +1963,6 @@ function App() {
         type: "INCOME",
         is_base: isBaseIncome,
       };
-
       fetch(`${apiUrl}/api/transactions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1638,7 +1976,7 @@ function App() {
     setIncomeAmount("");
     setIsBaseIncome(true);
     setEditingIncomeId(null);
-    setIncomeDate(getTodayDate()); // <-- Reset date back to today!
+    setIncomeDate(getTodayDate());
     fetchIncomes();
   };
 
@@ -1652,57 +1990,80 @@ function App() {
 
   const formatCurrency = (amount: number) =>
     amount.toLocaleString("es-CR", { maximumFractionDigits: 0 });
-
-  // NEW: Helper function to display dates safely in local timezone
   const formatDate = (dateString: string) => {
     if (!dateString) return "";
-
-    // We extract the YYYY-MM-DD string part
     const [year, month, day] = dateString.split("T")[0].split("-");
-
-    // Creating a Date(year, monthIndex, day) forces local time at 00:00 AM
     const localDate = new Date(Number(year), Number(month) - 1, Number(day));
     return localDate.toLocaleDateString();
   };
-
-  // Clean location using Regex: removes spaces and commas from the start
   const cleanLocation = (loc: string) =>
     loc ? loc.replace(/^[\s,]+/, "").trim() : "Unknown";
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6 flex flex-col items-center relative">
+    // Added dark mode transitions to the main wrapper
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6 flex flex-col items-center relative transition-colors duration-300">
       <div className="w-full max-w-4xl">
         {/* Header Section */}
-        <header className="bg-white p-6 rounded-xl shadow-sm mb-6 flex flex-col md:flex-row justify-between items-center border border-gray-100 gap-4">
+        <header className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm mb-6 flex flex-col md:flex-row justify-between items-center border border-gray-100 dark:border-gray-800 transition-colors duration-300 gap-4">
           <div>
-            <h1 className="text-3xl font-extrabold text-gray-800">Kardeva</h1>
-            <p className="text-sm text-gray-500 font-medium mt-1">
+            <h1 className="text-3xl font-extrabold text-gray-800 dark:text-white">
+              Kardeva
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mt-1">
               Financial Dashboard
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex items-center gap-4">
+            {/* NEW: Manage Cards Button */}
             <button
-              onClick={simulateGoogleScript}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors shadow-sm text-sm"
+              onClick={() => setIsCardModalOpen(true)}
+              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300"
+              title="Manage Cards"
             >
-              + Simulate Transaction
+              <span className="material-symbols-outlined text-2xl">
+                credit_card
+              </span>
+            </button>
+            {/* NEW: Month Picker */}
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 outline-none focus:border-indigo-500 font-bold transition-colors cursor-pointer"
+            />
+
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center"
+              title="Toggle Dark Mode"
+            >
+              {isDarkMode ? (
+                <span className="material-symbols-outlined text-yellow-400 text-3xl">
+                  light_mode
+                </span>
+              ) : (
+                <span className="material-symbols-outlined text-indigo-900 text-3xl">
+                  dark_mode
+                </span>
+              )}
             </button>
           </div>
         </header>
 
         {/* Chart Section */}
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 mb-6">
-          <h2 className="text-lg font-bold text-gray-700 mb-4">
+        <div className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 mb-6 transition-colors duration-300">
+          <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-4">
             Expenses Last 7 Days
           </h2>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>
+                {/* Chart grid adjusts to dark mode */}
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
-                  stroke="#f3f4f6"
+                  stroke={isDarkMode ? "#374151" : "#f3f4f6"}
                 />
                 <XAxis
                   dataKey="day"
@@ -1717,7 +2078,13 @@ function App() {
                   tickFormatter={(value) => `₡${value / 1000}k`}
                 />
                 <Tooltip
-                  cursor={{ fill: "#f3f4f6" }}
+                  cursor={{ fill: isDarkMode ? "#1f2937" : "#f3f4f6" }}
+                  contentStyle={{
+                    backgroundColor: isDarkMode ? "#111827" : "#fff",
+                    borderColor: isDarkMode ? "#374151" : "#e5e7eb",
+                    color: isDarkMode ? "#fff" : "#000",
+                    borderRadius: "8px",
+                  }}
                   formatter={(value: any) => [
                     `₡${formatCurrency(Number(value))}`,
                     "Total",
@@ -1728,25 +2095,25 @@ function App() {
             </ResponsiveContainer>
           </div>
         </div>
-        {/* ... Cards... */}
+
+        {/* Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          {/* ... Total Incomes ... */}
           <div
             onClick={() => {
               fetchIncomes();
               setIsIncomeModalOpen(true);
             }}
-            className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col cursor-pointer hover:ring-2 hover:ring-green-400 transition-all group"
+            className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-green-400 transition-all group"
           >
             <div className="flex justify-between items-center mb-1">
-              <span className="text-gray-500 text-xs font-semibold">
+              <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">
                 Total Incomes
               </span>
               <span className="text-[10px] text-green-500 opacity-0 group-hover:opacity-100 transition-opacity">
                 Edit ⚙️
               </span>
             </div>
-            <span className="text-xl font-extrabold text-green-600">
+            <span className="text-xl font-extrabold text-green-600 dark:text-green-400">
               + ₡{formatCurrency(baseIncome + extraIncome)}
             </span>
             <span className="text-[10px] text-gray-400 mt-1">
@@ -1754,141 +2121,155 @@ function App() {
               {formatCurrency(extraIncome)}
             </span>
           </div>
-          {/* ... My Expenses ... */}
+
           <div
             onClick={() => {
               fetchFixedExpenses();
               setIsFixedModalOpen(true);
             }}
-            className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col cursor-pointer hover:ring-2 hover:ring-red-400 transition-all group"
+            className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-red-400 transition-all group"
           >
             <div className="flex justify-between items-center mb-1">
-              <span className="text-gray-500 text-xs font-semibold">
+              <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">
                 My Expenses
               </span>
               <span className="text-[10px] text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
                 Manage Fixed ⚙️
               </span>
             </div>
-            <span className="text-xl font-extrabold text-red-600">
+            <span className="text-xl font-extrabold text-red-600 dark:text-red-400">
               - ₡{formatCurrency(personalExpenses + fixedExpenses)}
             </span>
             <span className="text-[10px] text-gray-400 mt-1">
-              Fixed: ₡{formatCurrency(fixedExpenses)} | Variable: ₡
+              Fixed: ₡{formatCurrency(fixedExpenses)} | Var: ₡
               {formatCurrency(personalExpenses)}
             </span>
           </div>
-          {/* ... Lent to Others ... */}
+
           <div
             onClick={() => setIsModalOpen(true)}
-            className="bg-orange-50 p-5 rounded-xl shadow-sm border border-orange-100 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
+            // FIXED: Changed dark:bg-orange-950/30 to dark:bg-gray-900 and dark:border-orange-900 to dark:border-gray-800
+            className="bg-orange-50 dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
           >
             <div className="flex justify-between items-center mb-1">
-              <span className="text-orange-700 text-xs font-semibold">
+              <span className="text-orange-700 dark:text-gray-400 text-xs font-semibold">
                 Lent to Others
               </span>
               <span className="text-[10px] text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">
                 Manage ⚙️
               </span>
             </div>
-            <span className="text-xl font-extrabold text-orange-600">
+            <span className="text-xl font-extrabold text-orange-600 dark:text-orange-400">
               - ₡{formatCurrency(thirdPartyExpenses)}
             </span>
-            <span className="text-[10px] text-gray-400 mt-1">
+            <span className="text-[10px] text-orange-400 dark:text-gray-500 mt-1">
               People: {thirdParties.length}
             </span>
           </div>
-          {/* ... Available Balance ... */}
-          <div className="bg-gray-900 p-5 rounded-xl shadow-md border border-gray-800 flex flex-col">
-            <span className="text-gray-400 text-xs font-semibold mb-1">
+
+          {/* Card 4: Available Balance */}
+          <div
+            // FIXED: Changed dark:bg-indigo-950/50 to dark:bg-gray-900 and dark:border-indigo-900 to dark:border-gray-800
+            className="bg-gray-900 dark:bg-gray-900 p-5 rounded-xl shadow-md border border-gray-800 dark:border-gray-800 flex flex-col"
+          >
+            <span className="text-gray-400 dark:text-gray-400 text-xs font-semibold mb-1">
               Available Balance
             </span>
-            <span className="text-xl font-extrabold text-white">
+            <span className="text-xl font-extrabold text-white dark:text-white">
               = ₡{formatCurrency(availableBalance)}
             </span>
           </div>
         </div>
 
         {/* Transactions List */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-6">
-          <div className="p-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-            <h2 className="text-lg font-bold text-gray-700">
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden mt-6 transition-colors duration-300">
+          <div className="p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex justify-between items-center">
+            <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200">
               Recent Transactions
             </h2>
           </div>
 
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {transactions.map((tx) => (
               <li
                 key={tx.id}
-                className="p-5 hover:bg-gray-50 transition-colors flex justify-between items-center"
+                className="p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors flex justify-between items-center"
               >
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-800">
+                    <span className="font-bold text-gray-800 dark:text-gray-200">
                       {tx.merchant}
                     </span>
                   </div>
-                  {/* NEW: Display cleaned location! */}
                   <span className="text-xs text-gray-400 mt-1">
                     {formatDate(tx.date)} • {cleanLocation(tx.location)} •{" "}
                     {tx.card_type}
                   </span>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  {tx.type === "INCOME" ? (
-                    <>
-                      <span className="font-bold text-green-600">
-                        + ₡{formatCurrency(Number(tx.amount))}
-                      </span>
-                      <span className="bg-green-100 text-green-800 text-[10px] px-2 py-1 rounded font-bold">
-                        INCOME
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span
-                        className={`font-bold ${tx.is_third_party ? "text-orange-600" : "text-red-600"}`}
-                      >
-                        - ₡{formatCurrency(Number(tx.amount))}
-                      </span>
-                      <button
-                        onClick={() => {
-                          setSelectedTx(tx);
-                          setEditTxMerchant(tx.merchant);
-                          if (tx.is_third_party) {
-                            setEditTxCategory("THIRD_PARTY");
-                            setEditTxPersonId(tx.third_party_id || "");
-                          } else if (tx.is_base) {
-                            setEditTxCategory("FIXED");
-                            setEditTxPersonId("");
-                          } else {
-                            setEditTxCategory("PERSONAL");
-                            setEditTxPersonId("");
-                          }
-                          setEditModalOpen(true);
-                        }}
-                        className="text-[10px] px-3 py-1.5 rounded transition-colors font-bold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 uppercase tracking-wider"
-                      >
-                        {tx.is_third_party
-                          ? `FOR: ${tx.third_party_name}`
-                          : "✏️ EDIT"}
-                      </button>
-                    </>
-                  )}
+                  <span
+                    className={`font-bold ${tx.is_third_party ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"}`}
+                  >
+                    - ₡{formatCurrency(Number(tx.amount))}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setSelectedTx(tx);
+                      setEditTxMerchant(tx.merchant);
+                      if (tx.is_third_party) {
+                        setEditTxCategory("THIRD_PARTY");
+                        setEditTxPersonId(tx.third_party_id || "");
+                      } else if (tx.is_base) {
+                        setEditTxCategory("FIXED");
+                        setEditTxPersonId("");
+                      } else {
+                        setEditTxCategory("PERSONAL");
+                        setEditTxPersonId("");
+                      }
+                      setEditModalOpen(true);
+                    }}
+                    // 1. ADDED: flex items-center justify-center gap-1
+                    className="flex items-center justify-center gap-1 text-[10px] px-3 py-1.5 rounded transition-colors font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 uppercase tracking-wider"
+                  >
+                    {tx.is_third_party ? (
+                      `FOR: ${tx.third_party_name}`
+                    ) : (
+                      <>
+                        {/* 2. FIXED: Removed the stray '}' and adjusted the size to 14px so it matches the 10px text */}
+                        <span className="material-symbols-outlined !text-[14px]">
+                          edit
+                        </span>
+                        EDIT
+                      </>
+                    )}
+                  </button>
                 </div>
               </li>
             ))}
           </ul>
+          <div className="p-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 text-center">
+            <button
+              onClick={() =>
+                alert("This will navigate to the full history page soon!")
+              }
+              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider"
+            >
+              Show all transactions
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* --- MODAL FOR THIRD PARTIES --- */}
+      {/* --- ALL MODALS WITH DARK MODE --- */}
+
+      {/* Third Parties Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="font-bold text-lg text-gray-800">Manage People</h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
+                Manage People
+              </h2>
               <button
                 onClick={() => {
                   setIsModalOpen(false);
@@ -1900,16 +2281,14 @@ function App() {
                 ✕
               </button>
             </div>
-
-            {/* Form Section */}
-            <div className="p-5 bg-gray-50 border-b border-gray-100">
+            <div className="p-5 bg-gray-50 dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800">
               <div className="flex gap-2">
                 <input
                   type="text"
                   placeholder="New person's name..."
                   value={newPersonName}
                   onChange={(e) => setNewPersonName(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 outline-none focus:border-indigo-500"
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm flex-1 outline-none focus:border-indigo-500"
                 />
                 <button
                   onClick={handleAddPerson}
@@ -1919,13 +2298,11 @@ function App() {
                 </button>
               </div>
             </div>
-
-            {/* List Section */}
             <div className="p-5 overflow-y-auto flex-1">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
                 Registered People
               </h3>
-              <ul className="divide-y divide-gray-100">
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
                 {thirdParties.map((person) => (
                   <li
                     key={person.id}
@@ -1936,15 +2313,14 @@ function App() {
                         type="text"
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
-                        className="border border-indigo-300 rounded px-2 py-1 text-sm outline-none w-1/2"
+                        className="border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-800 text-white rounded px-2 py-1 text-sm outline-none w-1/2"
                         autoFocus
                       />
                     ) : (
-                      <span className="font-medium text-gray-700">
+                      <span className="font-medium text-gray-700 dark:text-gray-300">
                         {person.name}
                       </span>
                     )}
-
                     <div className="flex gap-2">
                       {editingId === person.id ? (
                         <button
@@ -1959,22 +2335,20 @@ function App() {
                             setEditingId(person.id);
                             setEditName(person.name);
                           }}
-                          className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded hover:bg-blue-100 font-semibold"
+                          className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
                         >
                           Edit
                         </button>
                       )}
                       <button
                         onClick={() => handleDeletePerson(person.id)}
-                        className="text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded hover:bg-red-100 font-semibold"
+                        className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
                       >
                         Delete
                       </button>
                     </div>
                   </li>
                 ))}
-
-                {/* Empty State Message */}
                 {thirdParties.length === 0 && (
                   <p className="text-sm text-gray-400 text-center py-4">
                     No people registered yet.
@@ -1985,12 +2359,13 @@ function App() {
           </div>
         </div>
       )}
-      {/* --- NEW MODAL: EDIT RECENT TRANSACTION --- */}
+
+      {/* Edit Recent Transaction Modal */}
       {editModalOpen && selectedTx && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-              <h2 className="font-bold text-lg text-gray-800">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-950">
+              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
                 Edit Transaction
               </h2>
               <button
@@ -2000,28 +2375,24 @@ function App() {
                 ✕
               </button>
             </div>
-
             <div className="p-5 flex flex-col gap-4">
-              {/* Note / Description */}
               <div>
-                <label className="text-xs font-semibold text-gray-500 mb-1 block">
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 block">
                   Description / Note
                 </label>
                 <input
                   type="text"
                   value={editTxMerchant}
                   onChange={(e) => setEditTxMerchant(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-indigo-500 font-medium text-gray-800"
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-indigo-500 font-medium"
                 />
               </div>
-
-              {/* Categorization */}
               <div>
-                <label className="text-xs font-semibold text-gray-500 mb-2 block">
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 block">
                   Category
                 </label>
                 <div className="flex flex-col gap-2">
-                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                     <input
                       type="radio"
                       name="tx_category"
@@ -2029,12 +2400,11 @@ function App() {
                       onChange={() => setEditTxCategory("PERSONAL")}
                       className="w-4 h-4 text-indigo-600"
                     />
-                    <span className="text-sm font-medium text-gray-700">
-                      🙋‍♂️ Personal (Variable)
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Personal (Variable)
                     </span>
                   </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                     <input
                       type="radio"
                       name="tx_category"
@@ -2042,12 +2412,11 @@ function App() {
                       onChange={() => setEditTxCategory("FIXED")}
                       className="w-4 h-4 text-indigo-600"
                     />
-                    <span className="text-sm font-medium text-gray-700">
-                      📌 Fixed Expense (Bills, etc)
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Fixed Expense (Bills, etc)
                     </span>
                   </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                     <input
                       type="radio"
                       name="tx_category"
@@ -2055,29 +2424,32 @@ function App() {
                       onChange={() => setEditTxCategory("THIRD_PARTY")}
                       className="w-4 h-4 text-indigo-600"
                     />
-                    <span className="text-sm font-medium text-gray-700">
-                      👥 Lent to Someone
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Lent to Someone
                     </span>
                   </label>
                 </div>
               </div>
-
               {/* Conditional Select for Third Parties */}
               {editTxCategory === "THIRD_PARTY" && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-                  <label className="text-xs font-semibold text-orange-600 mb-1 block">
+                  <label className="text-xs font-semibold text-orange-600 dark:text-orange-400 mb-1 block">
                     Select Person
                   </label>
                   <select
                     value={editTxPersonId}
                     onChange={(e) => setEditTxPersonId(e.target.value)}
-                    className="border border-orange-300 rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-orange-500 bg-orange-50"
+                    className="border border-orange-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-orange-500 bg-orange-50 dark:bg-gray-800 text-gray-800 dark:text-white"
                   >
-                    <option value="" disabled>
+                    <option value="" disabled className="dark:bg-gray-800">
                       -- Choose a person --
                     </option>
                     {thirdParties.map((p) => (
-                      <option key={p.id} value={p.id}>
+                      <option
+                        key={p.id}
+                        value={p.id}
+                        className="dark:bg-gray-800"
+                      >
                         {p.name}
                       </option>
                     ))}
@@ -2089,7 +2461,6 @@ function App() {
                   )}
                 </div>
               )}
-
               <button
                 onClick={handleSaveRecentTx}
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mt-2 transition-colors shadow-md"
@@ -2100,12 +2471,13 @@ function App() {
           </div>
         </div>
       )}
-      {/* --- INCOMES MASTER MODAL --- */}
+
+      {/* Incomes Modal */}
       {isIncomeModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="font-bold text-lg text-gray-800">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
                 Manage Incomes
               </h2>
               <button
@@ -2118,33 +2490,29 @@ function App() {
                 ✕
               </button>
             </div>
-
-            {/* Form Section */}
-            <div className="p-5 bg-gray-50 border-b border-gray-100 flex flex-col gap-3">
+            <div className="p-5 bg-gray-50 dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 flex flex-col gap-3">
               <div className="flex gap-2">
                 <input
                   type="text"
                   placeholder="Source (e.g. Salary, Repair)"
                   value={incomeSource}
                   onChange={(e) => setIncomeSource(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500"
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500"
                 />
                 <input
                   type="number"
                   placeholder="Amount (₡)"
                   value={incomeAmount}
                   onChange={(e) => setIncomeAmount(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500"
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500"
                 />
               </div>
-
               <div className="flex gap-2">
-                {/* NEW: Date Picker Input */}
                 <input
                   type="date"
                   value={incomeDate}
                   onChange={(e) => setIncomeDate(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500 text-gray-600"
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500"
                 />
                 <button
                   onClick={handleSaveIncome}
@@ -2153,8 +2521,7 @@ function App() {
                   {editingIncomeId ? "Save Changes" : "Add Income"}
                 </button>
               </div>
-
-              <label className="flex items-center gap-2 mt-1 cursor-pointer text-sm text-gray-600">
+              <label className="flex items-center gap-2 mt-1 cursor-pointer text-sm text-gray-600 dark:text-gray-400">
                 <input
                   type="checkbox"
                   checked={isBaseIncome}
@@ -2164,12 +2531,11 @@ function App() {
                 Is this a Base/Fixed Income? (Uncheck for Extras)
               </label>
             </div>
-            {/* List Section */}
             <div className="p-5 overflow-y-auto flex-1">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
                 Registered Incomes
               </h3>
-              <ul className="divide-y divide-gray-100">
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
                 {incomesList.map((inc) => (
                   <li
                     key={inc.id}
@@ -2177,7 +2543,7 @@ function App() {
                   >
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-gray-700">
+                        <span className="font-bold text-gray-700 dark:text-gray-200">
                           {inc.merchant}
                         </span>
                         <span
@@ -2186,7 +2552,7 @@ function App() {
                           {inc.is_base ? "Base" : "Extra"}
                         </span>
                       </div>
-                      <span className="text-xs text-green-600 font-bold mt-1">
+                      <span className="text-xs text-green-600 dark:text-green-400 font-bold mt-1">
                         + ₡{formatCurrency(Number(inc.amount))}
                       </span>
                     </div>
@@ -2199,35 +2565,31 @@ function App() {
                           setIsBaseIncome(inc.is_base);
                           setIncomeDate(inc.date.split("T")[0]);
                         }}
-                        className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded hover:bg-blue-100 font-semibold"
+                        className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDeleteIncome(inc.id)}
-                        className="text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded hover:bg-red-100 font-semibold"
+                        className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
                       >
                         Delete
                       </button>
                     </div>
                   </li>
                 ))}
-                {incomesList.length === 0 && (
-                  <p className="text-sm text-gray-400 text-center py-4">
-                    No incomes registered yet.
-                  </p>
-                )}
               </ul>
             </div>
           </div>
         </div>
       )}
-      {/* --- FIXED EXPENSES MASTER MODAL --- */}
+
+      {/* Fixed Expenses Modal */}
       {isFixedModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="font-bold text-lg text-gray-800">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
                 Manage Fixed Expenses
               </h2>
               <button
@@ -2240,23 +2602,21 @@ function App() {
                 ✕
               </button>
             </div>
-
-            {/* Form Section */}
-            <div className="p-5 bg-gray-50 border-b border-gray-100 flex flex-col gap-3">
+            <div className="p-5 bg-gray-50 dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 flex flex-col gap-3">
               <div className="flex gap-2">
                 <input
                   type="text"
                   placeholder="e.g. Rent, Internet, Water"
                   value={fixedExpenseName}
                   onChange={(e) => setFixedExpenseName(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500"
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500"
                 />
                 <input
                   type="number"
                   placeholder="Amount (₡)"
                   value={fixedExpenseAmount}
                   onChange={(e) => setFixedExpenseAmount(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500"
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500"
                 />
               </div>
               <div className="flex gap-2">
@@ -2264,7 +2624,7 @@ function App() {
                   type="date"
                   value={fixedExpenseDate}
                   onChange={(e) => setFixedExpenseDate(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500 text-gray-600"
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500"
                 />
                 <button
                   onClick={handleSaveFixedExpense}
@@ -2274,13 +2634,11 @@ function App() {
                 </button>
               </div>
             </div>
-
-            {/* List Section */}
             <div className="p-5 overflow-y-auto flex-1">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
                 Registered Fixed Expenses
               </h3>
-              <ul className="divide-y divide-gray-100">
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
                 {fixedExpensesList.map((exp) => (
                   <li
                     key={exp.id}
@@ -2288,14 +2646,14 @@ function App() {
                   >
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-gray-700">
+                        <span className="font-bold text-gray-700 dark:text-gray-200">
                           {exp.merchant}
                         </span>
                         <span className="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">
                           FIXED
                         </span>
                       </div>
-                      <span className="text-xs text-red-600 font-bold mt-1">
+                      <span className="text-xs text-red-600 dark:text-red-400 font-bold mt-1">
                         - ₡{formatCurrency(Number(exp.amount))}
                       </span>
                     </div>
@@ -2307,7 +2665,7 @@ function App() {
                           setFixedExpenseAmount(exp.amount);
                           setFixedExpenseDate(exp.date.split("T")[0]);
                         }}
-                        className="text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded hover:bg-blue-100 font-semibold"
+                        className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
                       >
                         Edit
                       </button>
@@ -2320,16 +2678,142 @@ function App() {
                             });
                           }
                         }}
-                        className="text-xs text-red-600 bg-red-50 px-3 py-1.5 rounded hover:bg-red-100 font-semibold"
+                        className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
                       >
                         Delete
                       </button>
                     </div>
                   </li>
                 ))}
-                {fixedExpensesList.length === 0 && (
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* --- NEW MODAL: MANAGE CARDS --- */}
+      {isCardModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <span className="material-symbols-outlined">credit_card</span>{" "}
+                Manage Cards
+              </h2>
+              <button
+                onClick={() => {
+                  setIsCardModalOpen(false);
+                  resetCardForm();
+                }}
+                className="text-gray-400 hover:text-red-500 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Form Section */}
+            <div className="p-5 bg-gray-50 dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 flex flex-col gap-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Card Name (e.g. BAC Millas)"
+                  value={cardName}
+                  onChange={(e) => setCardName(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-indigo-500"
+                />
+                <input
+                  type="text"
+                  placeholder="Last 4 (e.g. 1234)"
+                  maxLength={4}
+                  value={cardLastFour}
+                  onChange={(e) => setCardLastFour(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/4 outline-none focus:border-indigo-500"
+                />
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={cardType}
+                  onChange={(e) =>
+                    setCardType(e.target.value as "CREDIT" | "DEBIT")
+                  }
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/3 outline-none focus:border-indigo-500"
+                >
+                  <option value="CREDIT">Credit</option>
+                  <option value="DEBIT">Debit</option>
+                </select>
+                <input
+                  type="number"
+                  placeholder="Cutoff Day (1-31)"
+                  min="1"
+                  max="31"
+                  value={cardCutoff}
+                  onChange={(e) => setCardCutoff(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/3 outline-none focus:border-indigo-500"
+                />
+                <button
+                  onClick={handleSaveCard}
+                  className="w-1/3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg text-sm transition-colors"
+                >
+                  {editingCardId ? "Save" : "Add Card"}
+                </button>
+              </div>
+            </div>
+
+            {/* List Section */}
+            <div className="p-5 overflow-y-auto flex-1">
+              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                Your Cards
+              </h3>
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                {cardsList.map((card) => (
+                  <li
+                    key={card.id}
+                    className="py-3 flex justify-between items-center"
+                  >
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-700 dark:text-gray-200">
+                          {card.name}
+                        </span>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${card.type === "CREDIT" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}
+                        >
+                          {card.type}
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
+                        **** **** **** {card.last_four} • Cutoff: Day{" "}
+                        {card.cutoff_day}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingCardId(card.id);
+                          setCardName(card.name);
+                          setCardLastFour(card.last_four);
+                          setCardType(card.type as "CREDIT" | "DEBIT");
+                          setCardCutoff(card.cutoff_day.toString());
+                        }}
+                        className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
+                      >
+                        <span className="material-symbols-outlined !text-[14px]">
+                          edit
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCard(card.id)}
+                        className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
+                      >
+                        <span className="material-symbols-outlined !text-[14px]">
+                          delete
+                        </span>
+                      </button>
+                    </div>
+                  </li>
+                ))}
+                {cardsList.length === 0 && (
                   <p className="text-sm text-gray-400 text-center py-4">
-                    No fixed expenses registered.
+                    No cards registered yet.
                   </p>
                 )}
               </ul>

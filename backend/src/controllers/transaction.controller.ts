@@ -2,9 +2,38 @@ import type { Request, Response } from "express";
 import { pool } from "../db.js";
 import { broadcast } from "../sse.js";
 
+const getMonthFilter = (req: Request) => {
+  return (
+    (req.query.month as string) || new Date().toISOString().substring(0, 7)
+  );
+};
+
+// NEW: The brain of our billing system
+const calculateBillingMonth = (
+  dateString: string,
+  cutoffDay: number | null,
+): string => {
+  const date = new Date(dateString);
+  let year = date.getFullYear();
+  let month = date.getMonth() + 1; // JavaScript months are 0-11
+  const day = date.getDate();
+
+  // If we have a cutoff day and the purchase day is AFTER the cutoff, shift to next month!
+  if (cutoffDay && day > cutoffDay) {
+    month++;
+    if (month > 12) {
+      month = 1;
+      year++;
+    }
+  }
+
+  // Format back to YYYY-MM
+  return `${year}-${month.toString().padStart(2, "0")}`;
+};
+
 export const createTransaction = async (req: Request, res: Response) => {
   try {
-    // 1. We extract the data from the request body (req.body)
+    // We extract the data from the request body (req.body)
     const {
       merchant,
       location,
@@ -18,13 +47,34 @@ export const createTransaction = async (req: Request, res: Response) => {
       is_base,
     } = req.body;
 
-    // 2. We write the SQL query using placeholders ($1, $2, etc.) for security
+    // Extract the last 4 digits from the card_type string (e.g. "VISA *1234" -> "1234")
+    const lastFourMatch = card_type ? card_type.match(/\d{4}$/) : null;
+    const lastFour = lastFourMatch ? lastFourMatch[0] : null;
+
+    let cutoffDay = null;
+    let cardId = null;
+
+    // If we found 4 digits, check if we have a card saved with those digits
+    if (lastFour) {
+      const cardResult = await pool.query(
+        "SELECT id, cutoff_day FROM cards WHERE last_four = $1",
+        [lastFour],
+      );
+      if (cardResult.rows.length > 0) {
+        cardId = cardResult.rows[0].id;
+        cutoffDay = cardResult.rows[0].cutoff_day;
+      }
+    }
+
+    // Let the brain calculate the billing month!
+    const billingMonth = calculateBillingMonth(date, cutoffDay);
+
+    // Save everything
     const insertQuery = `
-      INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, is_third_party, third_party_id, type, is_base)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, is_third_party, third_party_id, type, is_base, billing_month, card_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *; 
     `;
-    // 'RETURNING *' tells Postgres to give us back the row it just created
 
     const values = [
       merchant,
@@ -33,19 +83,21 @@ export const createTransaction = async (req: Request, res: Response) => {
       card_type,
       auth_code,
       amount,
-      is_third_party || false, // Default to false if not provided
-      third_party_id || null, // Default to null if not provided
+      is_third_party || false,
+      third_party_id || null,
       type || "EXPENSE",
       is_base || false,
+      billingMonth,
+      cardId,
     ];
 
-    // 3. We execute the query
+    // We execute the query
     const result = await pool.query(insertQuery, values);
     const newTransaction = result.rows[0];
 
     broadcast("new_transaction", newTransaction);
 
-    // 4. We send the created transaction back to the client with a 201 Created status
+    // We send the created transaction back to the client with a 201 Created status
     res.status(201).json({
       message: "Transaction created successfully",
       transaction: result.rows[0],
@@ -67,20 +119,18 @@ export const createTransaction = async (req: Request, res: Response) => {
 
 export const getTransactions = async (req: Request, res: Response) => {
   try {
+    const month = getMonthFilter(req);
+
     const selectQuery = `
       SELECT t.*, p.name as third_party_name 
       FROM transactions t
       LEFT JOIN third_parties p ON t.third_party_id = p.id
-      WHERE t.type = 'EXPENSE' AND t.is_base = false
-      ORDER BY t.date DESC 
-      LIMIT 15; 
+      WHERE t.type = 'EXPENSE' AND t.is_base = false AND t.billing_month = $1
+      ORDER BY t.date DESC
     `;
 
-    const result = await pool.query(selectQuery);
-
-    res.status(200).json({
-      transactions: result.rows,
-    });
+    const result = await pool.query(selectQuery, [month]);
+    res.status(200).json({ transactions: result.rows });
   } catch (error) {
     console.error("Error fetching transactions:", error);
     res.status(500).json({ error: "Internal Server Error" });
@@ -89,6 +139,7 @@ export const getTransactions = async (req: Request, res: Response) => {
 
 export const getSummary = async (req: Request, res: Response) => {
   try {
+    const month = getMonthFilter(req);
     const summaryQuery = `
       SELECT 
         COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = false), 0) AS personal_expenses,
@@ -96,19 +147,20 @@ export const getSummary = async (req: Request, res: Response) => {
         COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = true), 0) AS third_party_expenses,
         COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME' AND is_base = true), 0) AS base_income,
         COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME' AND is_base = false), 0) AS extra_income
-      FROM transactions;
+      FROM transactions
+      WHERE billing_month = $1;
     `;
 
-    const result = await pool.query(summaryQuery);
+    const result = await pool.query(summaryQuery, [month]);
     const personal = parseFloat(result.rows[0].personal_expenses);
-    const fixed = parseFloat(result.rows[0].fixed_expenses); // <-- NEW
+    const fixed = parseFloat(result.rows[0].fixed_expenses);
     const thirdParty = parseFloat(result.rows[0].third_party_expenses);
     const baseIncome = parseFloat(result.rows[0].base_income);
     const extraIncome = parseFloat(result.rows[0].extra_income);
 
     res.status(200).json({
       personalExpenses: personal,
-      fixedExpenses: fixed, // <-- NEW
+      fixedExpenses: fixed,
       thirdPartyExpenses: thirdParty,
       baseIncome,
       extraIncome,
@@ -121,21 +173,19 @@ export const getSummary = async (req: Request, res: Response) => {
 
 export const getChartData = async (req: Request, res: Response) => {
   try {
-    // We use TO_CHAR to format the date as 'YYYY-MM-DD' and group by it
+    const month = getMonthFilter(req);
+
     const chartQuery = `
       SELECT 
         TO_CHAR(date, 'YYYY-MM-DD') as day,
         SUM(amount) as total
       FROM transactions
-      WHERE type = 'EXPENSE'
+      WHERE type = 'EXPENSE' AND billing_month = $1
       GROUP BY TO_CHAR(date, 'YYYY-MM-DD')
       ORDER BY day ASC
-      LIMIT 7;
     `;
 
-    const result = await pool.query(chartQuery);
-
-    // Parse the total from string to number (Postgres SUM returns a string)
+    const result = await pool.query(chartQuery, [month]);
     const formattedData = result.rows.map((row) => ({
       day: row.day,
       total: parseFloat(row.total),
@@ -190,8 +240,9 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
 
 export const getIncomes = async (req: Request, res: Response) => {
   try {
-    const selectQuery = `SELECT * FROM transactions WHERE type = 'INCOME' ORDER BY date DESC;`;
-    const result = await pool.query(selectQuery);
+    const month = getMonthFilter(req);
+    const selectQuery = `SELECT * FROM transactions WHERE type = 'INCOME' AND billing_month = $1 ORDER BY date DESC;`;
+    const result = await pool.query(selectQuery, [month]);
     res.status(200).json({ incomes: result.rows });
   } catch (error) {
     res.status(500).json({ error: "Internal Server Error" });
@@ -277,8 +328,9 @@ export const updateTransactionDetails = async (req: Request, res: Response) => {
 
 export const getFixedExpenses = async (req: Request, res: Response) => {
   try {
-    const selectQuery = `SELECT * FROM transactions WHERE type = 'EXPENSE' AND is_base = true ORDER BY date DESC;`;
-    const result = await pool.query(selectQuery);
+    const month = getMonthFilter(req);
+    const selectQuery = `SELECT * FROM transactions WHERE type = 'EXPENSE' AND is_base = true AND billing_month = $1 ORDER BY date DESC;`;
+    const result = await pool.query(selectQuery, [month]);
     res.status(200).json({ fixedExpenses: result.rows });
   } catch (error) {
     res.status(500).json({ error: "Internal Server Error" });

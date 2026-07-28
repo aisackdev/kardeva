@@ -27,3 +27,11 @@ export interface ThirdParty {
   id: string;
   name: string;
 }
+
+export interface Card {
+  id: string;
+  name: string;
+  last_four: string;
+  type: string;
+  cutoff_day: number;
+}

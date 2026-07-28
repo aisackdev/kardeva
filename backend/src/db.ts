@@ -11,7 +11,6 @@ export const pool = new Pool({
 });
 
 export const initDB = async () => {
-  // 1. We create the tables ONLY if they don't exist (No more dropping!)
   const createThirdPartiesTableQuery = `
     CREATE TABLE IF NOT EXISTS third_parties (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -35,17 +34,37 @@ export const initDB = async () => {
     );
   `;
 
-  // 2. NEW: We use ALTER TABLE to safely add the new column to existing databases
+  const createCardsTableQuery = `
+    CREATE TABLE IF NOT EXISTS cards (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name VARCHAR(100) NOT NULL,
+      last_four VARCHAR(4) NOT NULL UNIQUE,
+      type VARCHAR(20) NOT NULL, -- 'CREDIT' or 'DEBIT'
+      cutoff_day INTEGER NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+
   const addColumnsQuery = `
     ALTER TABLE transactions 
     ADD COLUMN IF NOT EXISTS type VARCHAR(20) DEFAULT 'EXPENSE',
-    ADD COLUMN IF NOT EXISTS is_base BOOLEAN DEFAULT FALSE;
+    ADD COLUMN IF NOT EXISTS is_base BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS billing_month VARCHAR(7),
+    ADD COLUMN IF NOT EXISTS card_id UUID REFERENCES cards(id) ON DELETE SET NULL;
+  `;
+
+  const backfillBillingMonthQuery = `
+    UPDATE transactions 
+    SET billing_month = TO_CHAR(date, 'YYYY-MM') 
+    WHERE billing_month IS NULL;
   `;
 
   try {
     await pool.query(createThirdPartiesTableQuery);
     await pool.query(createTransactionsTableQuery);
-    await pool.query(addColumnsQuery); // Run the migration
+    await pool.query(createCardsTableQuery);
+    await pool.query(addColumnsQuery);
+    await pool.query(backfillBillingMonthQuery);
     console.log("✅ Database tables and migrations applied successfully.");
   } catch (error) {
     console.error("❌ Error setting up database:", error);
