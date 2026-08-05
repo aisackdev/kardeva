@@ -77,6 +77,7 @@ frontend/
   index.html
   package.json
   README.md
+  repomix-output.xml
   tsconfig.app.json
   tsconfig.json
   tsconfig.node.json
@@ -88,6 +89,1906 @@ docker-compose.yml
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="frontend/repomix-output.xml">
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+public/
+  favicon.svg
+  icons.svg
+src/
+  types/
+    index.ts
+  App.tsx
+  index.css
+  main.tsx
+.dockerignore
+.env.example
+.gitignore
+Dockerfile.dev
+eslint.config.js
+index.html
+package.json
+README.md
+tsconfig.app.json
+tsconfig.json
+tsconfig.node.json
+vite.config.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="public/favicon.svg">
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="46" fill="none" viewBox="0 0 48 46"><path fill="#863bff" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" style="fill:#863bff;fill:color(display-p3 .5252 .23 1);fill-opacity:1"/><mask id="a" width="48" height="46" x="0" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="#000" d="M25.842 44.938c-.664.844-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.183c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.498 0-3.579-1.842-3.579H1.133c-.92 0-1.456-1.04-.92-1.787L9.91.473c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.578 1.842 3.578h11.377c.943 0 1.473 1.088.89 1.832L25.843 44.94z" style="fill:#000;fill-opacity:1"/></mask><g mask="url(#a)"><g filter="url(#b)"><ellipse cx="5.508" cy="14.704" fill="#ede6ff" rx="5.508" ry="14.704" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -4.47 31.516)"/></g><g filter="url(#c)"><ellipse cx="10.399" cy="29.851" fill="#ede6ff" rx="10.399" ry="29.851" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -39.328 7.883)"/></g><g filter="url(#d)"><ellipse cx="5.508" cy="30.487" fill="#7e14ff" rx="5.508" ry="30.487" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -25.913 -14.639)scale(1 -1)"/></g><g filter="url(#e)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -32.644 -3.334)scale(1 -1)"/></g><g filter="url(#f)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -34.34 30.47)"/></g><g filter="url(#g)"><ellipse cx="14.072" cy="22.078" fill="#ede6ff" rx="14.072" ry="22.078" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="rotate(93.35 24.506 48.493)scale(-1 1)"/></g><g filter="url(#h)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#i)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#j)"><ellipse cx=".387" cy="8.972" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(39.51 .387 8.972)"/></g><g filter="url(#k)"><ellipse cx="47.523" cy="-6.092" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 47.523 -6.092)"/></g><g filter="url(#l)"><ellipse cx="41.412" cy="6.333" fill="#47bfff" rx="5.971" ry="9.665" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 41.412 6.333)"/></g><g filter="url(#m)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#n)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#o)"><ellipse cx="35.651" cy="29.907" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 35.651 29.907)"/></g><g filter="url(#p)"><ellipse cx="38.418" cy="32.4" fill="#47bfff" rx="5.971" ry="15.297" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 38.418 32.4)"/></g></g><defs><filter id="b" width="60.045" height="41.654" x="-19.77" y="16.149" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="c" width="90.34" height="51.437" x="-54.613" y="-7.533" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="d" width="79.355" height="29.4" x="-49.64" y="2.03" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="e" width="79.579" height="29.4" x="-45.045" y="20.029" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="f" width="79.579" height="29.4" x="-43.513" y="21.178" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="g" width="74.749" height="58.852" x="15.756" y="-17.901" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="h" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="i" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="j" width="56.045" height="63.649" x="-27.636" y="-22.853" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="k" width="54.814" height="64.646" x="20.116" y="-38.415" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="l" width="33.541" height="35.313" x="24.641" y="-11.323" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="m" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="n" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="o" width="54.814" height="64.646" x="8.244" y="-2.416" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="p" width="39.409" height="43.623" x="18.713" y="10.588" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter></defs></svg>
+</file>
+
+<file path="public/icons.svg">
+<svg xmlns="http://www.w3.org/2000/svg">
+  <symbol id="bluesky-icon" viewBox="0 0 16 17">
+    <g clip-path="url(#bluesky-clip)"><path fill="#08060d" d="M7.75 7.735c-.693-1.348-2.58-3.86-4.334-5.097-1.68-1.187-2.32-.981-2.74-.79C.188 2.065.1 2.812.1 3.251s.241 3.602.398 4.13c.52 1.744 2.367 2.333 4.07 2.145-2.495.37-4.71 1.278-1.805 4.512 3.196 3.309 4.38-.71 4.987-2.746.608 2.036 1.307 5.91 4.93 2.746 2.72-2.746.747-4.143-1.747-4.512 1.702.189 3.55-.4 4.07-2.145.156-.528.397-3.691.397-4.13s-.088-1.186-.575-1.406c-.42-.19-1.06-.395-2.741.79-1.755 1.24-3.64 3.752-4.334 5.099"/></g>
+    <defs><clipPath id="bluesky-clip"><path fill="#fff" d="M.1.85h15.3v15.3H.1z"/></clipPath></defs>
+  </symbol>
+  <symbol id="discord-icon" viewBox="0 0 20 19">
+    <path fill="#08060d" d="M16.224 3.768a14.5 14.5 0 0 0-3.67-1.153c-.158.286-.343.67-.47.976a13.5 13.5 0 0 0-4.067 0c-.128-.306-.317-.69-.476-.976A14.4 14.4 0 0 0 3.868 3.77C1.546 7.28.916 10.703 1.231 14.077a14.7 14.7 0 0 0 4.5 2.306q.545-.748.965-1.587a9.5 9.5 0 0 1-1.518-.74q.191-.14.372-.293c2.927 1.369 6.107 1.369 8.999 0q.183.152.372.294-.723.437-1.52.74.418.838.963 1.588a14.6 14.6 0 0 0 4.504-2.308c.37-3.911-.63-7.302-2.644-10.309m-9.13 8.234c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.894 0 1.614.82 1.599 1.82.001 1-.705 1.82-1.6 1.82m5.91 0c-.878 0-1.599-.82-1.599-1.82 0-.998.705-1.82 1.6-1.82.893 0 1.614.82 1.599 1.82 0 1-.706 1.82-1.6 1.82"/>
+  </symbol>
+  <symbol id="documentation-icon" viewBox="0 0 21 20">
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="m15.5 13.333 1.533 1.322c.645.555.967.833.967 1.178s-.322.623-.967 1.179L15.5 18.333m-3.333-5-1.534 1.322c-.644.555-.966.833-.966 1.178s.322.623.966 1.179l1.534 1.321"/>
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M17.167 10.836v-4.32c0-1.41 0-2.117-.224-2.68-.359-.906-1.118-1.621-2.08-1.96-.599-.21-1.349-.21-2.848-.21-2.623 0-3.935 0-4.983.369-1.684.591-3.013 1.842-3.641 3.428C3 6.449 3 7.684 3 10.154v2.122c0 2.558 0 3.838.706 4.726q.306.383.713.671c.76.536 1.79.64 3.581.66"/>
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M3 10a2.78 2.78 0 0 1 2.778-2.778c.555 0 1.209.097 1.748-.047.48-.129.854-.503.982-.982.145-.54.048-1.194.048-1.749a2.78 2.78 0 0 1 2.777-2.777"/>
+  </symbol>
+  <symbol id="github-icon" viewBox="0 0 19 19">
+    <path fill="#08060d" fill-rule="evenodd" d="M9.356 1.85C5.05 1.85 1.57 5.356 1.57 9.694a7.84 7.84 0 0 0 5.324 7.44c.387.079.528-.168.528-.376 0-.182-.013-.805-.013-1.454-2.165.467-2.616-.935-2.616-.935-.349-.91-.864-1.143-.864-1.143-.71-.48.051-.48.051-.48.787.051 1.2.805 1.2.805.695 1.194 1.817.857 2.268.649.064-.507.27-.857.49-1.052-1.728-.182-3.545-.857-3.545-3.87 0-.857.31-1.558.8-2.104-.078-.195-.349-1 .077-2.078 0 0 .657-.208 2.14.805a7.5 7.5 0 0 1 1.946-.26c.657 0 1.328.092 1.946.26 1.483-1.013 2.14-.805 2.14-.805.426 1.078.155 1.883.078 2.078.502.546.799 1.247.799 2.104 0 3.013-1.818 3.675-3.558 3.87.284.247.528.714.528 1.454 0 1.052-.012 1.896-.012 2.156 0 .208.142.455.528.377a7.84 7.84 0 0 0 5.324-7.441c.013-4.338-3.48-7.844-7.773-7.844" clip-rule="evenodd"/>
+  </symbol>
+  <symbol id="social-icon" viewBox="0 0 20 20">
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M12.5 6.667a4.167 4.167 0 1 0-8.334 0 4.167 4.167 0 0 0 8.334 0"/>
+    <path fill="none" stroke="#aa3bff" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.35" d="M2.5 16.667a5.833 5.833 0 0 1 8.75-5.053m3.837.474.513 1.035c.07.144.257.282.414.309l.93.155c.596.1.736.536.307.965l-.723.73a.64.64 0 0 0-.152.531l.207.903c.164.715-.213.991-.84.618l-.872-.52a.63.63 0 0 0-.577 0l-.872.52c-.624.373-1.003.094-.84-.618l.207-.903a.64.64 0 0 0-.152-.532l-.723-.729c-.426-.43-.289-.864.306-.964l.93-.156a.64.64 0 0 0 .412-.31l.513-1.034c.28-.562.735-.562 1.012 0"/>
+  </symbol>
+  <symbol id="x-icon" viewBox="0 0 19 19">
+    <path fill="#08060d" fill-rule="evenodd" d="M1.893 1.98c.052.072 1.245 1.769 2.653 3.77l2.892 4.114c.183.261.333.48.333.486s-.068.089-.152.183l-.522.593-.765.867-3.597 4.087c-.375.426-.734.834-.798.905a1 1 0 0 0-.118.148c0 .01.236.017.664.017h.663l.729-.83c.4-.457.796-.906.879-.999a692 692 0 0 0 1.794-2.038c.034-.037.301-.34.594-.675l.551-.624.345-.392a7 7 0 0 1 .34-.374c.006 0 .93 1.306 2.052 2.903l2.084 2.965.045.063h2.275c1.87 0 2.273-.003 2.266-.021-.008-.02-1.098-1.572-3.894-5.547-2.013-2.862-2.28-3.246-2.273-3.266.008-.019.282-.332 2.085-2.38l2-2.274 1.567-1.782c.022-.028-.016-.03-.65-.03h-.674l-.3.342a871 871 0 0 1-1.782 2.025c-.067.075-.405.458-.75.852a100 100 0 0 1-.803.91c-.148.172-.299.344-.99 1.127-.304.343-.32.358-.345.327-.015-.019-.904-1.282-1.976-2.808L6.365 1.85H1.8zm1.782.91 8.078 11.294c.772 1.08 1.413 1.973 1.425 1.984.016.017.241.02 1.05.017l1.03-.004-2.694-3.766L7.796 5.75 5.722 2.852l-1.039-.004-1.039-.004z" clip-rule="evenodd"/>
+  </symbol>
+</svg>
+</file>
+
+<file path="src/types/index.ts">
+export interface DbStatusResponse {
+  message: string;
+  serverTime: string;
+}
+
+export interface Transaction {
+  id: string;
+  merchant: string;
+  location: string;
+  date: string;
+  card_type: string;
+  auth_code: string;
+  amount: string;
+  is_third_party: boolean;
+  third_party_id?: string;
+  third_party_name?: string;
+  type: string;
+  is_base: boolean;
+}
+
+export interface ChartData {
+  day: string;
+  total: number;
+}
+
+export interface ThirdParty {
+  id: string;
+  name: string;
+}
+
+export interface Card {
+  id: string;
+  name: string;
+  last_four: string;
+  type: string;
+  cutoff_day: number;
+}
+</file>
+
+<file path="src/App.tsx">
+import { useEffect, useState, useMemo } from "react";
+import type { Transaction, ChartData, ThirdParty, Card } from "./types";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import dayjs from "dayjs";
+
+function App() {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [chartRange, setChartRange] = useState<number | "ALL">("ALL");
+  const [personalExpenses, setPersonalExpenses] = useState<number>(0);
+  const [thirdPartyExpenses, setThirdPartyExpenses] = useState<number>(0);
+  const [fixedExpenses, setFixedExpenses] = useState<number>(0);
+
+  const [thirdParties, setThirdParties] = useState<ThirdParty[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [newPersonName, setNewPersonName] = useState<string>("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState<string>("");
+
+  const [editModalOpen, setEditModalOpen] = useState<boolean>(false);
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [editTxMerchant, setEditTxMerchant] = useState<string>("");
+  const [editTxCategory, setEditTxCategory] = useState<
+    "PERSONAL" | "FIXED" | "THIRD_PARTY"
+  >("PERSONAL");
+  const [editTxPersonId, setEditTxPersonId] = useState<string>("");
+
+  const [incomeSource, setIncomeSource] = useState<string>("");
+  const [incomeAmount, setIncomeAmount] = useState<string>("");
+
+  const [baseIncome, setBaseIncome] = useState<number>(0);
+  const [extraIncome, setExtraIncome] = useState<number>(0);
+  const availableBalance =
+    baseIncome +
+    extraIncome -
+    personalExpenses -
+    thirdPartyExpenses -
+    fixedExpenses;
+
+  const [incomesList, setIncomesList] = useState<Transaction[]>([]);
+  const [isIncomeModalOpen, setIsIncomeModalOpen] = useState<boolean>(false);
+  const [isBaseIncome, setIsBaseIncome] = useState<boolean>(true);
+  const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
+
+  const getTodayDate = () => {
+    const now = new Date();
+    const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    return localNow.toISOString().split("T")[0];
+  };
+  const [incomeDate, setIncomeDate] = useState<string>(getTodayDate());
+
+  const [fixedExpensesList, setFixedExpensesList] = useState<Transaction[]>([]);
+  const [isFixedModalOpen, setIsFixedModalOpen] = useState<boolean>(false);
+  const [fixedExpenseName, setFixedExpenseName] = useState<string>("");
+  const [fixedExpenseAmount, setFixedExpenseAmount] = useState<string>("");
+  const [editingFixedId, setEditingFixedId] = useState<string | null>(null);
+  const [fixedExpenseDate, setFixedExpenseDate] =
+    useState<string>(getTodayDate());
+
+  // NEW: State for the global month filter (Default to current YYYY-MM)
+  const getCurrentMonth = () => {
+    const now = new Date();
+    const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    return localNow.toISOString().substring(0, 7); // Extracts "YYYY-MM"
+  };
+  const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonth());
+
+  // NEW: Cards Modal States
+  const [cardsList, setCardsList] = useState<Card[]>([]);
+  const [isCardModalOpen, setIsCardModalOpen] = useState<boolean>(false);
+  const [cardName, setCardName] = useState<string>("");
+  const [cardLastFour, setCardLastFour] = useState<string>("");
+  const [cardType, setCardType] = useState<"CREDIT" | "DEBIT">("CREDIT");
+  const [cardCutoff, setCardCutoff] = useState<string>("");
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+
+  // --- NEW: DARK MODE LOGIC ---
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    // Check if user has a preference saved in their browser
+    if (typeof window !== "undefined") {
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme) return savedTheme === "dark";
+      // If no preference, check system settings
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    // Apply the class to the root <html> element based on state
+    const root = document.documentElement;
+    if (isDarkMode) {
+      root.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      root.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [isDarkMode]);
+  // ----------------------------
+  const muiTheme = useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode: isDarkMode ? "dark" : "light",
+          primary: {
+            main: "#4f46e5",
+          },
+        },
+        shape: {
+          borderRadius: 8,
+        },
+      }),
+    [isDarkMode], // <-- This tells React: "Only recalculate if isDarkMode changes"
+  );
+
+  // --- API FETCHING ---
+  const fetchChartData = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions/chart?month=${selectedMonth}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.chartData) {
+          // 1. Get the year and month from the selector
+          const [year, month] = selectedMonth.split("-");
+
+          // 2. Magic trick to find out exactly how many days this month has (28, 30, or 31)
+          const daysInMonth = new Date(
+            Number(year),
+            Number(month),
+            0,
+          ).getDate();
+
+          // 3. We create an array with exactly that many days and fill it
+          const fullMonthData = Array.from({ length: daysInMonth }, (_, i) => {
+            // Build the string matching Postgres format (e.g. "2026-07-05")
+            const dayString = `${year}-${month}-${String(i + 1).padStart(2, "0")}`;
+
+            // Search if the backend gave us any data for this exact day
+            const foundData = data.chartData.find(
+              (d: ChartData) => d.day === dayString,
+            );
+
+            return {
+              day: dayString,
+              total: foundData ? foundData.total : 0, // Put 0 if we didn't spend anything
+            };
+          });
+
+          // 4. Save the perfect array!
+          setChartData(fullMonthData);
+        }
+      })
+      .catch((error) => console.error("Error fetching chart data:", error));
+  };
+
+  const fetchTransactions = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions?month=${selectedMonth}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.transactions) setTransactions(data.transactions);
+      });
+  };
+
+  const fetchSummary = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions/summary?month=${selectedMonth}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.personalExpenses !== undefined) {
+          setPersonalExpenses(data.personalExpenses);
+          setFixedExpenses(data.fixedExpenses);
+          setThirdPartyExpenses(data.thirdPartyExpenses);
+          setBaseIncome(data.baseIncome);
+          setExtraIncome(data.extraIncome);
+        }
+      });
+  };
+
+  const fetchFixedExpenses = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions/fixed-expenses?month=${selectedMonth}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.fixedExpenses) setFixedExpensesList(data.fixedExpenses);
+      });
+  };
+
+  const handleSaveFixedExpense = () => {
+    if (!fixedExpenseName.trim() || !fixedExpenseAmount) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    if (editingFixedId) {
+      fetch(`${apiUrl}/api/transactions/${editingFixedId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchant: fixedExpenseName,
+          amount: Number(fixedExpenseAmount),
+          is_base: true,
+          date: fixedExpenseDate,
+        }),
+      }).then(() => resetFixedForm());
+    } else {
+      const newFixed = {
+        merchant: fixedExpenseName,
+        location: "Auto-Pay",
+        date: fixedExpenseDate,
+        card_type: "DIRECT",
+        auth_code: `FIX-${Math.floor(Math.random() * 1000000)}`,
+        amount: Number(fixedExpenseAmount),
+        is_third_party: false,
+        type: "EXPENSE",
+        is_base: true,
+      };
+      fetch(`${apiUrl}/api/transactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newFixed),
+      }).then(() => resetFixedForm());
+    }
+  };
+
+  const resetFixedForm = () => {
+    setFixedExpenseName("");
+    setFixedExpenseAmount("");
+    setEditingFixedId(null);
+    setFixedExpenseDate(getTodayDate());
+    fetchFixedExpenses();
+  };
+
+  const fetchThirdParties = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/third-parties`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.thirdParties) setThirdParties(data.thirdParties);
+      });
+  };
+
+  const fetchIncomes = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions/incomes?month=${selectedMonth}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.incomes) setIncomesList(data.incomes);
+      });
+  };
+
+  // NEW: Fetch Cards
+  const fetchCards = () => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/cards`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.cards) setCardsList(data.cards);
+      });
+  };
+
+  // NEW: Save Card
+  const handleSaveCard = () => {
+    if (!cardName.trim() || !cardLastFour.trim() || !cardCutoff) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    if (editingCardId) {
+      // EDIT MODE
+      fetch(`${apiUrl}/api/cards/${editingCardId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cardName,
+          last_four: cardLastFour,
+          type: cardType,
+          cutoff_day: Number(cardCutoff),
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.error) alert(data.error);
+          else resetCardForm();
+        });
+    } else {
+      // ADD MODE
+      fetch(`${apiUrl}/api/cards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: cardName,
+          last_four: cardLastFour,
+          type: cardType,
+          cutoff_day: Number(cardCutoff),
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.error) alert(data.error);
+          else resetCardForm();
+        });
+    }
+  };
+
+  const resetCardForm = () => {
+    setCardName("");
+    setCardLastFour("");
+    setCardType("CREDIT");
+    setCardCutoff("");
+    setEditingCardId(null);
+    fetchCards();
+  };
+
+  const handleDeleteCard = (id: string) => {
+    if (!confirm("Delete this card?")) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/cards/${id}`, { method: "DELETE" }).then(() =>
+      fetchCards(),
+    );
+  };
+
+  useEffect(() => {
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetchTransactions();
+    fetchSummary();
+    fetchChartData();
+    fetchThirdParties();
+    fetchIncomes();
+    fetchFixedExpenses();
+    fetchCards();
+
+    const eventSource = new EventSource(`${apiUrl}/api/stream`);
+
+    const updateAll = () => {
+      fetchTransactions();
+      fetchSummary();
+      fetchChartData();
+      fetchIncomes();
+      fetchFixedExpenses();
+      fetchCards();
+    };
+
+    eventSource.addEventListener("new_transaction", updateAll);
+    eventSource.addEventListener("transaction_updated", updateAll);
+    eventSource.addEventListener("transaction_deleted", updateAll);
+
+    return () => {
+      eventSource.close();
+    };
+  }, [selectedMonth]);
+
+  const handleAddPerson = () => {
+    if (!newPersonName.trim()) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/third-parties`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newPersonName }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) alert(data.error);
+        else {
+          setNewPersonName("");
+          fetchThirdParties();
+        }
+      });
+  };
+
+  const handleUpdatePerson = (id: string) => {
+    if (!editName.trim()) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/third-parties/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editName }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) alert(data.error);
+        else {
+          setEditingId(null);
+          fetchThirdParties();
+          fetchTransactions();
+        }
+      });
+  };
+
+  const handleDeletePerson = (id: string) => {
+    if (
+      !confirm(
+        "Are you sure? Their transactions will become personal expenses.",
+      )
+    )
+      return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/third-parties/${id}`, { method: "DELETE" }).then(
+      () => {
+        fetchThirdParties();
+        fetchTransactions();
+        fetchSummary();
+      },
+    );
+  };
+
+  const handleSaveRecentTx = () => {
+    if (!selectedTx || !editTxMerchant.trim()) return;
+    if (editTxCategory === "THIRD_PARTY" && !editTxPersonId) {
+      alert("Please select a person.");
+      return;
+    }
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    fetch(`${apiUrl}/api/transactions/${selectedTx.id}/edit`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        merchant: editTxMerchant,
+        is_base: editTxCategory === "FIXED",
+        is_third_party: editTxCategory === "THIRD_PARTY",
+        third_party_id:
+          editTxCategory === "THIRD_PARTY" ? editTxPersonId : null,
+      }),
+    }).then(() => {
+      setEditModalOpen(false);
+      setSelectedTx(null);
+    });
+  };
+
+  const handleSaveIncome = () => {
+    if (!incomeSource.trim() || !incomeAmount) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    if (editingIncomeId) {
+      fetch(`${apiUrl}/api/transactions/${editingIncomeId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchant: incomeSource,
+          amount: Number(incomeAmount),
+          is_base: isBaseIncome,
+          date: incomeDate,
+        }),
+      }).then(() => resetIncomeForm());
+    } else {
+      const newIncome = {
+        merchant: incomeSource,
+        location: "Direct",
+        date: incomeDate,
+        card_type: "TRANSFER",
+        auth_code: `INC-${Math.floor(Math.random() * 1000000)}`,
+        amount: Number(incomeAmount),
+        is_third_party: false,
+        type: "INCOME",
+        is_base: isBaseIncome,
+      };
+      fetch(`${apiUrl}/api/transactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newIncome),
+      }).then(() => resetIncomeForm());
+    }
+  };
+
+  const resetIncomeForm = () => {
+    setIncomeSource("");
+    setIncomeAmount("");
+    setIsBaseIncome(true);
+    setEditingIncomeId(null);
+    setIncomeDate(getTodayDate());
+    fetchIncomes();
+  };
+
+  const handleDeleteIncome = (id: string) => {
+    if (!confirm("Delete this income?")) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+    fetch(`${apiUrl}/api/transactions/${id}`, { method: "DELETE" }).then(() =>
+      fetchIncomes(),
+    );
+  };
+
+  const formatCurrency = (amount: number) =>
+    amount.toLocaleString("es-CR", { maximumFractionDigits: 0 });
+  const formatDate = (dateString: string) => {
+    if (!dateString) return "";
+    const [year, month, day] = dateString.split("T")[0].split("-");
+    const localDate = new Date(Number(year), Number(month) - 1, Number(day));
+    return localDate.toLocaleDateString();
+  };
+  const cleanLocation = (loc: string) =>
+    loc ? loc.replace(/^[\s,]+/, "").trim() : "Unknown";
+
+  // NEW: Calculate which data to display based on the selected range
+  // .slice(-7) takes the last 7 items from the array
+  const displayedChartData =
+    chartRange === "ALL" ? chartData : chartData.slice(-chartRange);
+
+  return (
+    <ThemeProvider theme={muiTheme}>
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6 flex flex-col items-center relative transition-colors duration-300">
+          <div className="w-full max-w-4xl">
+            {/* Header Section */}
+            <header className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm mb-6 flex flex-col md:flex-row justify-between items-center border border-gray-100 dark:border-gray-800 transition-colors duration-300 gap-4">
+              <div>
+                <h1 className="text-3xl font-extrabold text-gray-800 dark:text-white">
+                  Kardeva
+                </h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mt-1">
+                  Financial Dashboard
+                </p>
+              </div>
+
+              <div className="flex items-center gap-4">
+                {/* NEW: Manage Cards Button */}
+                <button
+                  onClick={() => setIsCardModalOpen(true)}
+                  className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300"
+                  title="Manage Cards"
+                >
+                  <span className="material-symbols-outlined text-2xl">
+                    credit_card
+                  </span>
+                </button>
+
+                {/* UPGRADED: MUI X Date Picker configured for Month/Year */}
+                <DatePicker
+                  views={["month", "year"]}
+                  value={dayjs(selectedMonth)}
+                  onChange={(newValue) => {
+                    if (newValue) {
+                      setSelectedMonth(newValue.format("YYYY-MM"));
+                    }
+                  }}
+                  slotProps={{
+                    textField: {
+                      size: "small",
+                    },
+                  }}
+                />
+
+                <button
+                  onClick={() => setIsDarkMode(!isDarkMode)}
+                  className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center"
+                  title="Toggle Dark Mode"
+                >
+                  {isDarkMode ? (
+                    <span className="material-symbols-outlined text-yellow-400 text-3xl">
+                      light_mode
+                    </span>
+                  ) : (
+                    <span className="material-symbols-outlined text-indigo-900 text-3xl">
+                      dark_mode
+                    </span>
+                  )}
+                </button>
+              </div>
+            </header>
+
+            {/* Chart Section */}
+            <div className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 mb-6 transition-colors duration-300">
+              {/* Header & Filters */}
+              <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-2">
+                <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200">
+                  Expenses Overview
+                </h2>
+
+                {/* NEW: Chart Range Filters */}
+                <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+                  <button
+                    onClick={() => setChartRange(7)}
+                    className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartRange === 7 ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
+                  >
+                    7D
+                  </button>
+                  <button
+                    onClick={() => setChartRange(14)}
+                    className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartRange === 14 ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
+                  >
+                    14D
+                  </button>
+                  <button
+                    onClick={() => setChartRange(21)}
+                    className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartRange === 21 ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
+                  >
+                    21D
+                  </button>
+                  <button
+                    onClick={() => setChartRange("ALL")}
+                    className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartRange === "ALL" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
+                  >
+                    ALL
+                  </button>
+                </div>
+              </div>
+
+              {/* The Chart */}
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  {/* UPDATED: We feed it the sliced data! */}
+                  <BarChart data={displayedChartData}>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      stroke={isDarkMode ? "#374151" : "#f3f4f6"}
+                    />
+                    <XAxis
+                      dataKey="day"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#9ca3af", fontSize: 12 }}
+                      /* UPDATED: Since showing 31 dates like "2026-07-22" takes too much space, we format it to only show the Day number (e.g. "22") */
+                      tickFormatter={(val) => val.split("-")[2]}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "#9ca3af", fontSize: 12 }}
+                      tickFormatter={(value) => `₡${value / 1000}k`}
+                    />
+                    <Tooltip
+                      cursor={{ fill: isDarkMode ? "#1f2937" : "#f3f4f6" }}
+                      contentStyle={{
+                        backgroundColor: isDarkMode ? "#111827" : "#fff",
+                        borderColor: isDarkMode ? "#374151" : "#e5e7eb",
+                        color: isDarkMode ? "#fff" : "#000",
+                        borderRadius: "8px",
+                      }}
+                      /* UPDATED: Show the formatted local date in the hover box */
+                      labelFormatter={(label) => formatDate(label)}
+                      formatter={(value: any) => [
+                        `₡${formatCurrency(Number(value))}`,
+                        "Total",
+                      ]}
+                    />
+                    <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div
+                onClick={() => {
+                  fetchIncomes();
+                  setIsIncomeModalOpen(true);
+                }}
+                className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-green-400 transition-all group"
+              >
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">
+                    Total Incomes
+                  </span>
+                  <span className="text-[10px] text-green-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Edit ⚙️
+                  </span>
+                </div>
+                <span className="text-xl font-extrabold text-green-600 dark:text-green-400">
+                  + ₡{formatCurrency(baseIncome + extraIncome)}
+                </span>
+                <span className="text-[10px] text-gray-400 mt-1">
+                  Base: ₡{formatCurrency(baseIncome)} | Extra: ₡
+                  {formatCurrency(extraIncome)}
+                </span>
+              </div>
+
+              <div
+                onClick={() => {
+                  fetchFixedExpenses();
+                  setIsFixedModalOpen(true);
+                }}
+                className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-red-400 transition-all group"
+              >
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">
+                    My Expenses
+                  </span>
+                  <span className="text-[10px] text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Manage Fixed ⚙️
+                  </span>
+                </div>
+                <span className="text-xl font-extrabold text-red-600 dark:text-red-400">
+                  - ₡{formatCurrency(personalExpenses + fixedExpenses)}
+                </span>
+                <span className="text-[10px] text-gray-400 mt-1">
+                  Fixed: ₡{formatCurrency(fixedExpenses)} | Var: ₡
+                  {formatCurrency(personalExpenses)}
+                </span>
+              </div>
+
+              <div
+                onClick={() => setIsModalOpen(true)}
+                // FIXED: Changed dark:bg-orange-950/30 to dark:bg-gray-900 and dark:border-orange-900 to dark:border-gray-800
+                className="bg-orange-50 dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
+              >
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-orange-700 dark:text-gray-400 text-xs font-semibold">
+                    Lent to Others
+                  </span>
+                  <span className="text-[10px] text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Manage ⚙️
+                  </span>
+                </div>
+                <span className="text-xl font-extrabold text-orange-600 dark:text-orange-400">
+                  - ₡{formatCurrency(thirdPartyExpenses)}
+                </span>
+                <span className="text-[10px] text-orange-400 dark:text-gray-500 mt-1">
+                  People: {thirdParties.length}
+                </span>
+              </div>
+
+              {/* Card 4: Available Balance */}
+              <div
+                // FIXED: Changed dark:bg-indigo-950/50 to dark:bg-gray-900 and dark:border-indigo-900 to dark:border-gray-800
+                className="bg-gray-900 dark:bg-gray-900 p-5 rounded-xl shadow-md border border-gray-800 dark:border-gray-800 flex flex-col"
+              >
+                <span className="text-gray-400 dark:text-gray-400 text-xs font-semibold mb-1">
+                  Available Balance
+                </span>
+                <span className="text-xl font-extrabold text-white dark:text-white">
+                  = ₡{formatCurrency(availableBalance)}
+                </span>
+              </div>
+            </div>
+
+            {/* Transactions List */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden mt-6 transition-colors duration-300">
+              <div className="p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex justify-between items-center">
+                <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200">
+                  Monthly Transactions
+                </h2>
+                {/* NEW: Counter badge */}
+                <span className="text-xs font-bold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 px-3 py-1 rounded-full">
+                  {transactions.length}
+                </span>
+              </div>
+
+              {/* NEW: max-h-[400px] overflow-y-auto custom-scrollbar makes this specific section scrollable! */}
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[400px] overflow-y-auto custom-scrollbar">
+                {transactions.length === 0 ? (
+                  <li className="p-6 text-center text-gray-400">
+                    No transactions found for this month.
+                  </li>
+                ) : (
+                  transactions.map((tx) => (
+                    <li
+                      key={tx.id}
+                      className="p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors flex justify-between items-center"
+                    >
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-gray-800 dark:text-gray-200">
+                            {tx.merchant}
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-400 mt-1">
+                          {formatDate(tx.date)} • {cleanLocation(tx.location)} •{" "}
+                          {tx.card_type}
+                        </span>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <span
+                          className={`font-bold ${tx.is_third_party ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"}`}
+                        >
+                          - ₡{formatCurrency(Number(tx.amount))}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setSelectedTx(tx);
+                            setEditTxMerchant(tx.merchant);
+                            if (tx.is_third_party) {
+                              setEditTxCategory("THIRD_PARTY");
+                              setEditTxPersonId(tx.third_party_id || "");
+                            } else if (tx.is_base) {
+                              setEditTxCategory("FIXED");
+                              setEditTxPersonId("");
+                            } else {
+                              setEditTxCategory("PERSONAL");
+                              setEditTxPersonId("");
+                            }
+                            setEditModalOpen(true);
+                          }}
+                          className="flex items-center justify-center gap-1 text-[10px] px-3 py-1.5 rounded transition-colors font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 uppercase tracking-wider"
+                        >
+                          {tx.is_third_party ? (
+                            `FOR: ${tx.third_party_name}`
+                          ) : (
+                            <>
+                              <span className="material-symbols-outlined !text-[14px]">
+                                edit
+                              </span>
+                              EDIT
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </li>
+                  ))
+                )}
+              </ul>
+            </div>
+          </div>
+
+          {/* --- ALL MODALS WITH DARK MODE --- */}
+
+          {/* Third Parties Modal */}
+          {isModalOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+                <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                  <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
+                    Manage People
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setEditingId(null);
+                      setNewPersonName("");
+                    }}
+                    className="text-gray-400 hover:text-red-500 font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="p-5 bg-gray-50 dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="New person's name..."
+                      value={newPersonName}
+                      onChange={(e) => setNewPersonName(e.target.value)}
+                      className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm flex-1 outline-none focus:border-indigo-500"
+                    />
+                    <button
+                      onClick={handleAddPerson}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+                <div className="p-5 overflow-y-auto flex-1">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                    Registered People
+                  </h3>
+                  <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {thirdParties.map((person) => (
+                      <li
+                        key={person.id}
+                        className="py-3 flex justify-between items-center"
+                      >
+                        {editingId === person.id ? (
+                          <input
+                            type="text"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className="border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-800 text-white rounded px-2 py-1 text-sm outline-none w-1/2"
+                            autoFocus
+                          />
+                        ) : (
+                          <span className="font-medium text-gray-700 dark:text-gray-300">
+                            {person.name}
+                          </span>
+                        )}
+                        <div className="flex gap-2">
+                          {editingId === person.id ? (
+                            <button
+                              onClick={() => handleUpdatePerson(person.id)}
+                              className="text-xs text-white bg-green-500 px-3 py-1.5 rounded font-semibold"
+                            >
+                              Save
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setEditingId(person.id);
+                                setEditName(person.name);
+                              }}
+                              className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
+                            >
+                              Edit
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeletePerson(person.id)}
+                            className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                    {thirdParties.length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-4">
+                        No people registered yet.
+                      </p>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Recent Transaction Modal */}
+          {editModalOpen && selectedTx && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+                <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-950">
+                  <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
+                    Edit Transaction
+                  </h2>
+                  <button
+                    onClick={() => setEditModalOpen(false)}
+                    className="text-gray-400 hover:text-red-500 font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="p-5 flex flex-col gap-4">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 block">
+                      Description / Note
+                    </label>
+                    <input
+                      type="text"
+                      value={editTxMerchant}
+                      onChange={(e) => setEditTxMerchant(e.target.value)}
+                      className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-indigo-500 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 block">
+                      Category
+                    </label>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <input
+                          type="radio"
+                          name="tx_category"
+                          checked={editTxCategory === "PERSONAL"}
+                          onChange={() => setEditTxCategory("PERSONAL")}
+                          className="w-4 h-4 text-indigo-600"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Personal (Variable)
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <input
+                          type="radio"
+                          name="tx_category"
+                          checked={editTxCategory === "FIXED"}
+                          onChange={() => setEditTxCategory("FIXED")}
+                          className="w-4 h-4 text-indigo-600"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Fixed Expense (Bills, etc)
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                        <input
+                          type="radio"
+                          name="tx_category"
+                          checked={editTxCategory === "THIRD_PARTY"}
+                          onChange={() => setEditTxCategory("THIRD_PARTY")}
+                          className="w-4 h-4 text-indigo-600"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Lent to Someone
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                  {/* Conditional Select for Third Parties */}
+                  {editTxCategory === "THIRD_PARTY" && (
+                    <div className="animate-in fade-in slide-in-from-top-2 duration-200">
+                      <label className="text-xs font-semibold text-orange-600 dark:text-orange-400 mb-1 block">
+                        Select Person
+                      </label>
+                      <select
+                        value={editTxPersonId}
+                        onChange={(e) => setEditTxPersonId(e.target.value)}
+                        className="border border-orange-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-orange-500 bg-orange-50 dark:bg-gray-800 text-gray-800 dark:text-white"
+                      >
+                        <option value="" disabled className="dark:bg-gray-800">
+                          -- Choose a person --
+                        </option>
+                        {thirdParties.map((p) => (
+                          <option
+                            key={p.id}
+                            value={p.id}
+                            className="dark:bg-gray-800"
+                          >
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                      {thirdParties.length === 0 && (
+                        <p className="text-xs text-red-500 mt-1">
+                          Please add people in "Manage People" first.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    onClick={handleSaveRecentTx}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mt-2 transition-colors shadow-md"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Incomes Modal */}
+          {isIncomeModalOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+                <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                  <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
+                    Manage Incomes
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setIsIncomeModalOpen(false);
+                      resetIncomeForm();
+                    }}
+                    className="text-gray-400 hover:text-red-500 font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="p-5 bg-gray-50 dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 flex flex-col gap-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Source (e.g. Salary, Repair)"
+                      value={incomeSource}
+                      onChange={(e) => setIncomeSource(e.target.value)}
+                      className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500"
+                    />
+                    <input
+                      type="number"
+                      placeholder="Amount (₡)"
+                      value={incomeAmount}
+                      onChange={(e) => setIncomeAmount(e.target.value)}
+                      className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={incomeDate}
+                      onChange={(e) => setIncomeDate(e.target.value)}
+                      className="w-1/2 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [color-scheme:light] dark:[color-scheme:dark] cursor-pointer"
+                    />
+                    <button
+                      onClick={handleSaveIncome}
+                      className="w-1/2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-lg text-sm transition-colors"
+                    >
+                      {editingIncomeId ? "Save Changes" : "Add Income"}
+                    </button>
+                  </div>
+                  <label className="flex items-center gap-2 mt-1 cursor-pointer text-sm text-gray-600 dark:text-gray-400">
+                    <input
+                      type="checkbox"
+                      checked={isBaseIncome}
+                      onChange={(e) => setIsBaseIncome(e.target.checked)}
+                      className="w-4 h-4 text-green-600"
+                    />
+                    Is this a Base/Fixed Income? (Uncheck for Extras)
+                  </label>
+                </div>
+                <div className="p-5 overflow-y-auto flex-1">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                    Registered Incomes
+                  </h3>
+                  <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {incomesList.map((inc) => (
+                      <li
+                        key={inc.id}
+                        className="py-3 flex justify-between items-center"
+                      >
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-700 dark:text-gray-200">
+                              {inc.merchant}
+                            </span>
+                            <span
+                              className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${inc.is_base ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}
+                            >
+                              {inc.is_base ? "Base" : "Extra"}
+                            </span>
+                          </div>
+                          <span className="text-xs text-green-600 dark:text-green-400 font-bold mt-1">
+                            + ₡{formatCurrency(Number(inc.amount))}
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingIncomeId(inc.id);
+                              setIncomeSource(inc.merchant);
+                              setIncomeAmount(inc.amount);
+                              setIsBaseIncome(inc.is_base);
+                              setIncomeDate(inc.date.split("T")[0]);
+                            }}
+                            className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteIncome(inc.id)}
+                            className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Fixed Expenses Modal */}
+          {isFixedModalOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+                <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                  <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
+                    Manage Fixed Expenses
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setIsFixedModalOpen(false);
+                      resetFixedForm();
+                    }}
+                    className="text-gray-400 hover:text-red-500 font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="p-5 bg-gray-50 dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 flex flex-col gap-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. Rent, Internet, Water"
+                      value={fixedExpenseName}
+                      onChange={(e) => setFixedExpenseName(e.target.value)}
+                      className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500"
+                    />
+                    <input
+                      type="number"
+                      placeholder="Amount (₡)"
+                      value={fixedExpenseAmount}
+                      onChange={(e) => setFixedExpenseAmount(e.target.value)}
+                      className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={fixedExpenseDate}
+                      onChange={(e) => setFixedExpenseDate(e.target.value)}
+                      className="w-1/2 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all [color-scheme:light] dark:[color-scheme:dark] cursor-pointer"
+                    />
+                    <button
+                      onClick={handleSaveFixedExpense}
+                      className="w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold py-2 rounded-lg text-sm transition-colors"
+                    >
+                      {editingFixedId ? "Save Changes" : "Add Fixed Expense"}
+                    </button>
+                  </div>
+                </div>
+                <div className="p-5 overflow-y-auto flex-1">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                    Registered Fixed Expenses
+                  </h3>
+                  <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {fixedExpensesList.map((exp) => (
+                      <li
+                        key={exp.id}
+                        className="py-3 flex justify-between items-center"
+                      >
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-700 dark:text-gray-200">
+                              {exp.merchant}
+                            </span>
+                            <span className="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase">
+                              FIXED
+                            </span>
+                          </div>
+                          <span className="text-xs text-red-600 dark:text-red-400 font-bold mt-1">
+                            - ₡{formatCurrency(Number(exp.amount))}
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingFixedId(exp.id);
+                              setFixedExpenseName(exp.merchant);
+                              setFixedExpenseAmount(exp.amount);
+                              setFixedExpenseDate(exp.date.split("T")[0]);
+                            }}
+                            className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm("Delete this fixed expense?")) {
+                                const apiUrl = import.meta.env.VITE_API_URL;
+                                fetch(`${apiUrl}/api/transactions/${exp.id}`, {
+                                  method: "DELETE",
+                                });
+                              }
+                            }}
+                            className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* --- NEW MODAL: MANAGE CARDS --- */}
+          {isCardModalOpen && (
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+              <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+                <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                  <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                    <span className="material-symbols-outlined">
+                      credit_card
+                    </span>{" "}
+                    Manage Cards
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setIsCardModalOpen(false);
+                      resetCardForm();
+                    }}
+                    className="text-gray-400 hover:text-red-500 font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Form Section */}
+                <div className="p-5 bg-gray-50 dark:bg-gray-950 border-b border-gray-100 dark:border-gray-800 flex flex-col gap-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Card Name (e.g. BAC Millas)"
+                      value={cardName}
+                      onChange={(e) => setCardName(e.target.value)}
+                      className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-indigo-500"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Last 4 (e.g. 1234)"
+                      maxLength={4}
+                      value={cardLastFour}
+                      onChange={(e) => setCardLastFour(e.target.value)}
+                      className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/4 outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <select
+                      value={cardType}
+                      onChange={(e) =>
+                        setCardType(e.target.value as "CREDIT" | "DEBIT")
+                      }
+                      className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/3 outline-none focus:border-indigo-500"
+                    >
+                      <option value="CREDIT">Credit</option>
+                      <option value="DEBIT">Debit</option>
+                    </select>
+                    <input
+                      type="number"
+                      placeholder="Cutoff Day (1-31)"
+                      min="1"
+                      max="31"
+                      value={cardCutoff}
+                      onChange={(e) => setCardCutoff(e.target.value)}
+                      className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/3 outline-none focus:border-indigo-500"
+                    />
+                    <button
+                      onClick={handleSaveCard}
+                      className="w-1/3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg text-sm transition-colors"
+                    >
+                      {editingCardId ? "Save" : "Add Card"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* List Section */}
+                <div className="p-5 overflow-y-auto flex-1">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                    Your Cards
+                  </h3>
+                  <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {cardsList.map((card) => (
+                      <li
+                        key={card.id}
+                        className="py-3 flex justify-between items-center"
+                      >
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-700 dark:text-gray-200">
+                              {card.name}
+                            </span>
+                            <span
+                              className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${card.type === "CREDIT" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}
+                            >
+                              {card.type}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
+                            **** **** **** {card.last_four} • Cutoff: Day{" "}
+                            {card.cutoff_day}
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingCardId(card.id);
+                              setCardName(card.name);
+                              setCardLastFour(card.last_four);
+                              setCardType(card.type as "CREDIT" | "DEBIT");
+                              setCardCutoff(card.cutoff_day.toString());
+                            }}
+                            className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
+                          >
+                            <span className="material-symbols-outlined !text-[14px]">
+                              edit
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCard(card.id)}
+                            className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
+                          >
+                            <span className="material-symbols-outlined !text-[14px]">
+                              delete
+                            </span>
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                    {cardsList.length === 0 && (
+                      <p className="text-sm text-gray-400 text-center py-4">
+                        No cards registered yet.
+                      </p>
+                    )}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </LocalizationProvider>
+    </ThemeProvider>
+  );
+}
+
+export default App;
+</file>
+
+<file path="src/index.css">
+@import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-gray-200 dark:bg-gray-800 rounded-full;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-300 dark:bg-gray-700;
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* Optional: Make the little calendar icon adapt perfectly to the text color */
+::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: 0.2s;
+}
+
+html.dark ::-webkit-calendar-picker-indicator {
+  filter: invert(1); /* Inverts the black icon to white in dark mode */
+}
+
+::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+</file>
+
+<file path="src/main.tsx">
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import './index.css'
+import App from './App.tsx'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+</file>
+
+<file path=".dockerignore">
+# Ignore local dependnecies 
+node_modules
+npm-debug.log
+
+# Ignore Git files
+.git
+.gitignore
+
+# Ignore builds (in case they are generated locally)
+dist
+build
+
+# Ignore environment variables (for security, they are not copied in the image)
+.env
+</file>
+
+<file path=".env.example">
+VITE_API_URL=http://localhost:3000
+</file>
+
+<file path=".gitignore">
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.env.*
+!.env.example
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+</file>
+
+<file path="Dockerfile.dev">
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm install
+
+COPY . .
+
+CMD ["npm", "run", "dev"]
+</file>
+
+<file path="eslint.config.js">
+import js from '@eslint/js'
+import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import tseslint from 'typescript-eslint'
+import { defineConfig, globalIgnores } from 'eslint/config'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      js.configs.recommended,
+      tseslint.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+    ],
+    languageOptions: {
+      globals: globals.browser,
+    },
+  },
+])
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>frontend</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+    />
+  </head>
+  <body class="bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+</file>
+
+<file path="package.json">
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^9.2.0",
+    "@mui/x-date-pickers": "^9.10.1",
+    "@tailwindcss/vite": "^4.3.2",
+    "dayjs": "^1.11.21",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "recharts": "^3.9.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.0",
+    "@eslint/js": "^10.0.1",
+    "@rolldown/plugin-babel": "^0.2.3",
+    "@types/babel__core": "^7.20.5",
+    "@types/node": "^24.12.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.5.0",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^4.3.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2",
+    "vite": "^8.0.12"
+  }
+}
+</file>
+
+<file path="README.md">
+# React + TypeScript + Vite
+
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+
+## React Compiler
+
+The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+
+Note: This will impact Vite dev & build performances.
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
+
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+```
+
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+```
+</file>
+
+<file path="tsconfig.app.json">
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "esnext",
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}
+</file>
+
+<file path="tsconfig.json">
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
+</file>
+
+<file path="tsconfig.node.json">
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023"],
+    "module": "esnext",
+    "types": ["node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["vite.config.ts"]
+}
+</file>
+
+<file path="vite.config.ts">
+import { defineConfig } from "vite";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
+import tailwindcss from "@tailwindcss/vite";
+
+export default defineConfig({
+  plugins: [
+    react(),
+    babel({ presets: [reactCompilerPreset()] }),
+    tailwindcss(),
+  ],
+});
+</file>
+
+</files>
+</file>
 
 <file path="backend/src/controllers/card.controller.ts">
 // backend/src/controllers/card.controller.ts
@@ -185,7 +2086,7 @@ export const updateCard = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, last_four, type, cutoff_day } = req.body;
 
-    // 1. Update the card details
+    // 1. Update the card details in the database
     const updateQuery = `
       UPDATE cards 
       SET name = $1, last_four = $2, type = $3, cutoff_day = $4 
@@ -205,8 +2106,26 @@ export const updateCard = async (req: Request, res: Response) => {
       return;
     }
 
-    // 2. THE MAGIC: Recalculate billing_month for all transactions belonging to this card
-    // Just in case the user changed the cutoff_day!
+    // 2. THE SMART SYNC ALGORITHM
+
+    // A. Release: Unlink transactions that were linked by mistake (typo in last_four)
+    // We set their card_id to NULL and revert their billing_month back to normal
+    const releaseQuery = `
+      UPDATE transactions 
+      SET card_id = NULL, billing_month = TO_CHAR(date, 'YYYY-MM')
+      WHERE card_id = $1 AND card_type NOT LIKE '%' || $2;
+    `;
+    await pool.query(releaseQuery, [id, last_four]);
+
+    // B. Adopt: Link orphan transactions that match the corrected last_four digits
+    const adoptQuery = `
+      UPDATE transactions 
+      SET card_id = $1
+      WHERE card_type LIKE '%' || $2 AND card_id IS NULL;
+    `;
+    await pool.query(adoptQuery, [id, last_four]);
+
+    // C. Recalculate: Apply the (potentially new) cutoff_day to all linked transactions
     const syncQuery = `
       UPDATE transactions 
       SET 
@@ -218,7 +2137,7 @@ export const updateCard = async (req: Request, res: Response) => {
     `;
     await pool.query(syncQuery, [cutoff_day, id]);
 
-    // 3. Tell React to refresh the UI because the math might have changed
+    // 3. Tell React to refresh the UI because the math might have changed heavily!
     broadcast("transaction_updated", {});
 
     res
@@ -235,24 +2154,6 @@ export const updateCard = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
-</file>
-
-<file path="backend/src/routes/card.routes.ts">
-import { Router } from "express";
-import {
-  getCards,
-  createCard,
-  deleteCard,
-  updateCard,
-} from "../controllers/card.controller.js";
-
-const router = Router();
-router.get("/", getCards);
-router.post("/", createCard);
-router.put("/:id", updateCard);
-router.delete("/:id", deleteCard);
-
-export default router;
 </file>
 
 <file path="backend/src/controllers/system.controller.ts">
@@ -278,6 +2179,24 @@ export const getDatabaseStatus = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
+</file>
+
+<file path="backend/src/routes/card.routes.ts">
+import { Router } from "express";
+import {
+  getCards,
+  createCard,
+  deleteCard,
+  updateCard,
+} from "../controllers/card.controller.js";
+
+const router = Router();
+router.get("/", getCards);
+router.post("/", createCard);
+router.put("/:id", updateCard);
+router.delete("/:id", deleteCard);
+
+export default router;
 </file>
 
 <file path="backend/src/routes/system.routes.ts">
@@ -878,11 +2797,6 @@ export const deleteThirdParty = async (req: Request, res: Response) => {
 };
 </file>
 
-<file path="frontend/src/index.css">
-@import "tailwindcss";
-@variant dark (&:where(.dark, .dark *));
-</file>
-
 <file path="frontend/.gitignore">
 # Logs
 logs
@@ -997,6 +2911,77 @@ postgres_data/
 .DS_Store
 .vscode/
 .idea/
+</file>
+
+<file path="frontend/src/index.css">
+@import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-gray-200 dark:bg-gray-800 rounded-full;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-300 dark:bg-gray-700;
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* Optional: Make the little calendar icon adapt perfectly to the text color */
+::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: 0.2s;
+}
+
+html.dark ::-webkit-calendar-picker-indicator {
+  filter: invert(1); /* Inverts the black icon to white in dark mode */
+}
+
+::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+</file>
+
+<file path="backend/src/routes/transaction.routes.ts">
+import { Router } from "express";
+import {
+  createTransaction,
+  getTransactions,
+  getSummary,
+  getChartData,
+  updateRecentTransaction,
+  getIncomes,
+  deleteTransaction,
+  updateTransactionDetails,
+  getFixedExpenses,
+} from "../controllers/transaction.controller.js";
+
+const router = Router();
+
+router.get("/summary", getSummary);
+router.get("/chart", getChartData);
+router.get("/incomes", getIncomes);
+router.get("/fixed-expenses", getFixedExpenses);
+
+router.post("/", createTransaction);
+router.get("/", getTransactions);
+router.patch("/:id/edit", updateRecentTransaction);
+router.put("/:id", updateTransactionDetails);
+router.delete("/:id", deleteTransaction);
+
+export default router;
 </file>
 
 <file path="backend/src/db.ts">
@@ -1145,17 +3130,16 @@ const getMonthFilter = (req: Request) => {
   );
 };
 
-// NEW: The brain of our billing system
+// UPGRADED: The brain of our billing system (Timezone Safe!)
 const calculateBillingMonth = (
   dateString: string,
   cutoffDay: number | null,
 ): string => {
-  const date = new Date(dateString);
-  let year = date.getFullYear();
-  let month = date.getMonth() + 1; // JavaScript months are 0-11
-  const day = date.getDate();
+  // 1. Timezone-safe date extraction (ignores UTC shifts by reading the string directly)
+  const datePart = dateString.split("T")[0]; // gets "YYYY-MM-DD"
+  let [year, month, day] = datePart.split("-").map(Number);
 
-  // If we have a cutoff day and the purchase day is AFTER the cutoff, shift to next month!
+  // 2. If we have a cutoff day and the purchase day is AFTER the cutoff, shift to next month!
   if (cutoffDay && day > cutoffDay) {
     month++;
     if (month > 12) {
@@ -1164,7 +3148,7 @@ const calculateBillingMonth = (
     }
   }
 
-  // Format back to YYYY-MM
+  // 3. Format back to YYYY-MM
   return `${year}-${month.toString().padStart(2, "0")}`;
 };
 
@@ -1263,8 +3247,7 @@ export const getTransactions = async (req: Request, res: Response) => {
       FROM transactions t
       LEFT JOIN third_parties p ON t.third_party_id = p.id
       WHERE t.type = 'EXPENSE' AND t.is_base = false AND t.billing_month = $1
-      ORDER BY t.date DESC 
-      LIMIT 7; 
+      ORDER BY t.date DESC
     `;
 
     const result = await pool.query(selectQuery, [month]);
@@ -1321,7 +3304,6 @@ export const getChartData = async (req: Request, res: Response) => {
       WHERE type = 'EXPENSE' AND billing_month = $1
       GROUP BY TO_CHAR(date, 'YYYY-MM-DD')
       ORDER BY day ASC
-      LIMIT 7;
     `;
 
     const result = await pool.query(chartQuery, [month]);
@@ -1437,30 +3419,57 @@ export const deleteTransaction = async (req: Request, res: Response) => {
 export const updateTransactionDetails = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    // 1. ADD 'date' to the destructured body
     const { merchant, amount, is_base, date } = req.body;
 
-    // 2. UPDATE the SQL query to include date = $4
+    // 1. Check if this transaction belongs to a card to apply cutoff rules
+    const txCheckQuery = await pool.query(
+      "SELECT card_id FROM transactions WHERE id = $1",
+      [id],
+    );
+
+    if (txCheckQuery.rowCount === 0) {
+      res.status(404).json({ error: "Transaction not found" });
+      return;
+    }
+
+    const cardId = txCheckQuery.rows[0].card_id;
+    let cutoffDay = null;
+
+    if (cardId) {
+      const cardCheckQuery = await pool.query(
+        "SELECT cutoff_day FROM cards WHERE id = $1",
+        [cardId],
+      );
+      if (cardCheckQuery.rowCount > 0) {
+        cutoffDay = cardCheckQuery.rows[0].cutoff_day;
+      }
+    }
+
+    // 2. Recalculate the correct billing month with the new date
+    const newBillingMonth = calculateBillingMonth(date, cutoffDay);
+
+    // 3. UPDATE the SQL query to include billing_month = $5
     const updateQuery = `
       UPDATE transactions 
-      SET merchant = $1, amount = $2, is_base = $3, date = $4 
-      WHERE id = $5 
+      SET merchant = $1, amount = $2, is_base = $3, date = $4, billing_month = $5 
+      WHERE id = $6 
       RETURNING *;
     `;
 
-    // 3. Pass the date variable into the array
+    // 4. Execute with all 6 parameters
     const result = await pool.query(updateQuery, [
       merchant,
       amount,
       is_base,
       date,
+      newBillingMonth,
       id,
     ]);
 
     broadcast("transaction_updated", result.rows[0]);
     res.status(200).json({ transaction: result.rows[0] });
   } catch (error) {
-    console.error("Error updating income:", error);
+    console.error("Error updating transaction details:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
@@ -1475,36 +3484,6 @@ export const getFixedExpenses = async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
-</file>
-
-<file path="backend/src/routes/transaction.routes.ts">
-import { Router } from "express";
-import {
-  createTransaction,
-  getTransactions,
-  getSummary,
-  getChartData,
-  updateRecentTransaction,
-  getIncomes,
-  deleteTransaction,
-  updateTransactionDetails,
-  getFixedExpenses,
-} from "../controllers/transaction.controller.js";
-
-const router = Router();
-
-router.get("/summary", getSummary);
-router.get("/chart", getChartData);
-router.get("/incomes", getIncomes);
-router.get("/fixed-expenses", getFixedExpenses);
-
-router.post("/", createTransaction);
-router.get("/", getTransactions);
-router.patch("/:id/edit", updateRecentTransaction);
-router.put("/:id", updateTransactionDetails);
-router.delete("/:id", deleteTransaction);
-
-export default router;
 </file>
 
 <file path="frontend/src/types/index.ts">
@@ -1563,6 +3542,7 @@ import {
 function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [chartData, setChartData] = useState<ChartData[]>([]);
+  const [chartRange, setChartRange] = useState<number | "ALL">("ALL");
   const [personalExpenses, setPersonalExpenses] = useState<number>(0);
   const [thirdPartyExpenses, setThirdPartyExpenses] = useState<number>(0);
   const [fixedExpenses, setFixedExpenses] = useState<number>(0);
@@ -1661,8 +3641,38 @@ function App() {
     fetch(`${apiUrl}/api/transactions/chart?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
-        if (data.chartData) setChartData(data.chartData);
-      });
+        if (data.chartData) {
+          // 1. Get the year and month from the selector
+          const [year, month] = selectedMonth.split("-");
+
+          // 2. Magic trick to find out exactly how many days this month has (28, 30, or 31)
+          const daysInMonth = new Date(
+            Number(year),
+            Number(month),
+            0,
+          ).getDate();
+
+          // 3. We create an array with exactly that many days and fill it
+          const fullMonthData = Array.from({ length: daysInMonth }, (_, i) => {
+            // Build the string matching Postgres format (e.g. "2026-07-05")
+            const dayString = `${year}-${month}-${String(i + 1).padStart(2, "0")}`;
+
+            // Search if the backend gave us any data for this exact day
+            const foundData = data.chartData.find(
+              (d: ChartData) => d.day === dayString,
+            );
+
+            return {
+              day: dayString,
+              total: foundData ? foundData.total : 0, // Put 0 if we didn't spend anything
+            };
+          });
+
+          // 4. Save the perfect array!
+          setChartData(fullMonthData);
+        }
+      })
+      .catch((error) => console.error("Error fetching chart data:", error));
   };
 
   const fetchTransactions = () => {
@@ -1999,6 +4009,11 @@ function App() {
   const cleanLocation = (loc: string) =>
     loc ? loc.replace(/^[\s,]+/, "").trim() : "Unknown";
 
+  // NEW: Calculate which data to display based on the selected range
+  // .slice(-7) takes the last 7 items from the array
+  const displayedChartData =
+    chartRange === "ALL" ? chartData : chartData.slice(-chartRange);
+
   return (
     // Added dark mode transitions to the main wrapper
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6 flex flex-col items-center relative transition-colors duration-300">
@@ -2025,13 +4040,28 @@ function App() {
                 credit_card
               </span>
             </button>
+
             {/* NEW: Month Picker */}
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 rounded-lg px-4 py-2 outline-none focus:border-indigo-500 font-bold transition-colors cursor-pointer"
-            />
+            <div className="relative flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-colors cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/80">
+              {/* 1. Google Material Icon (calendar_month) */}
+              <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 mr-2 text-[20px] pointer-events-none">
+                calendar_month
+              </span>
+
+              {/* 2. The invisible-but-functional native input */}
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                onClick={(e) => {
+                  // This tells the browser to force-open the calendar popup when clicking
+                  try {
+                    (e.target as HTMLInputElement).showPicker();
+                  } catch (err) {}
+                }}
+                className="bg-transparent text-gray-700 dark:text-gray-200 font-bold outline-none cursor-pointer w-full appearance-none [&::-webkit-calendar-picker-indicator]:hidden"
+              />
+            </div>
 
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
@@ -2053,13 +4083,46 @@ function App() {
 
         {/* Chart Section */}
         <div className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 mb-6 transition-colors duration-300">
-          <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200 mb-4">
-            Expenses Last 7 Days
-          </h2>
+          {/* Header & Filters */}
+          <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-2">
+            <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200">
+              Expenses Overview
+            </h2>
+
+            {/* NEW: Chart Range Filters */}
+            <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
+              <button
+                onClick={() => setChartRange(7)}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartRange === 7 ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
+              >
+                7D
+              </button>
+              <button
+                onClick={() => setChartRange(14)}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartRange === 14 ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
+              >
+                14D
+              </button>
+              <button
+                onClick={() => setChartRange(21)}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartRange === 21 ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
+              >
+                21D
+              </button>
+              <button
+                onClick={() => setChartRange("ALL")}
+                className={`px-3 py-1 text-xs font-bold rounded-md transition-colors ${chartRange === "ALL" ? "bg-white dark:bg-gray-700 text-indigo-600 dark:text-indigo-400 shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}
+              >
+                ALL
+              </button>
+            </div>
+          </div>
+
+          {/* The Chart */}
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                {/* Chart grid adjusts to dark mode */}
+              {/* UPDATED: We feed it the sliced data! */}
+              <BarChart data={displayedChartData}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
@@ -2070,6 +4133,8 @@ function App() {
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: "#9ca3af", fontSize: 12 }}
+                  /* UPDATED: Since showing 31 dates like "2026-07-22" takes too much space, we format it to only show the Day number (e.g. "22") */
+                  tickFormatter={(val) => val.split("-")[2]}
                 />
                 <YAxis
                   axisLine={false}
@@ -2085,6 +4150,8 @@ function App() {
                     color: isDarkMode ? "#fff" : "#000",
                     borderRadius: "8px",
                   }}
+                  /* UPDATED: Show the formatted local date in the hover box */
+                  labelFormatter={(label) => formatDate(label)}
                   formatter={(value: any) => [
                     `₡${formatCurrency(Number(value))}`,
                     "Total",
@@ -2103,20 +4170,20 @@ function App() {
               fetchIncomes();
               setIsIncomeModalOpen(true);
             }}
-            className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-green-400 transition-all group"
+            className="bg-green-50 dark:bg-green-950/30 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-green-900 flex flex-col cursor-pointer hover:ring-2 hover:ring-green-400 transition-all group"
           >
             <div className="flex justify-between items-center mb-1">
               <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">
                 Total Incomes
               </span>
               <span className="text-[10px] text-green-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                Edit ⚙️
+                Manage ⚙️
               </span>
             </div>
             <span className="text-xl font-extrabold text-green-600 dark:text-green-400">
               + ₡{formatCurrency(baseIncome + extraIncome)}
             </span>
-            <span className="text-[10px] text-gray-400 mt-1">
+            <span className="text-[10px] text-gray-500 mt-1">
               Base: ₡{formatCurrency(baseIncome)} | Extra: ₡
               {formatCurrency(extraIncome)}
             </span>
@@ -2127,20 +4194,20 @@ function App() {
               fetchFixedExpenses();
               setIsFixedModalOpen(true);
             }}
-            className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-red-400 transition-all group"
+            className="bg-red-50 dark:bg-red-950/30 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-red-900 flex flex-col cursor-pointer hover:ring-2 hover:ring-red-400 transition-all group"
           >
             <div className="flex justify-between items-center mb-1">
               <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">
                 My Expenses
               </span>
               <span className="text-[10px] text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                Manage Fixed ⚙️
+                Manage ⚙️
               </span>
             </div>
             <span className="text-xl font-extrabold text-red-600 dark:text-red-400">
               - ₡{formatCurrency(personalExpenses + fixedExpenses)}
             </span>
-            <span className="text-[10px] text-gray-400 mt-1">
+            <span className="text-[10px] text-gray-500 mt-1">
               Fixed: ₡{formatCurrency(fixedExpenses)} | Var: ₡
               {formatCurrency(personalExpenses)}
             </span>
@@ -2148,11 +4215,10 @@ function App() {
 
           <div
             onClick={() => setIsModalOpen(true)}
-            // FIXED: Changed dark:bg-orange-950/30 to dark:bg-gray-900 and dark:border-orange-900 to dark:border-gray-800
-            className="bg-orange-50 dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
+            className="bg-orange-50 dark:bg-orange-950/30 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-orange-900 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
           >
             <div className="flex justify-between items-center mb-1">
-              <span className="text-orange-700 dark:text-gray-400 text-xs font-semibold">
+              <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">
                 Lent to Others
               </span>
               <span className="text-[10px] text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2162,16 +4228,13 @@ function App() {
             <span className="text-xl font-extrabold text-orange-600 dark:text-orange-400">
               - ₡{formatCurrency(thirdPartyExpenses)}
             </span>
-            <span className="text-[10px] text-orange-400 dark:text-gray-500 mt-1">
+            <span className="text-[10px] text-gray-500 mt-1xd">
               People: {thirdParties.length}
             </span>
           </div>
 
           {/* Card 4: Available Balance */}
-          <div
-            // FIXED: Changed dark:bg-indigo-950/50 to dark:bg-gray-900 and dark:border-indigo-900 to dark:border-gray-800
-            className="bg-gray-900 dark:bg-gray-900 p-5 rounded-xl shadow-md border border-gray-800 dark:border-gray-800 flex flex-col"
-          >
+          <div className="bg-gray-950 dark:bg-gray-800 p-5 rounded-xl shadow-md border border-gray-800 dark:border-gray-800 flex flex-col">
             <span className="text-gray-400 dark:text-gray-400 text-xs font-semibold mb-1">
               Available Balance
             </span>
@@ -2183,80 +4246,79 @@ function App() {
 
         {/* Transactions List */}
         <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden mt-6 transition-colors duration-300">
-          <div className="p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex justify-between items-center">
+          <div className="p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-100 dark:bg-gray-950 flex justify-between items-center">
             <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200">
-              Recent Transactions
+              Monthly Transactions
             </h2>
+            {/* Counter badge */}
+            <span className="text-xs font-bold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 px-3 py-1 rounded-full">
+              {transactions.length}
+            </span>
           </div>
 
-          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-            {transactions.map((tx) => (
-              <li
-                key={tx.id}
-                className="p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors flex justify-between items-center"
-              >
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-800 dark:text-gray-200">
-                      {tx.merchant}
+          {/* NEW: max-h-[400px] overflow-y-auto custom-scrollbar makes this specific section scrollable! */}
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[400px] overflow-y-auto custom-scrollbar">
+            {transactions.length === 0 ? (
+              <li className="p-6 text-center text-gray-400">
+                No transactions found for this month.
+              </li>
+            ) : (
+              transactions.map((tx) => (
+                <li
+                  key={tx.id}
+                  className="p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors flex justify-between items-center"
+                >
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-gray-800 dark:text-gray-200">
+                        {tx.merchant}
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-400 mt-1">
+                      {formatDate(tx.date)} • {cleanLocation(tx.location)} •{" "}
+                      {tx.card_type}
                     </span>
                   </div>
-                  <span className="text-xs text-gray-400 mt-1">
-                    {formatDate(tx.date)} • {cleanLocation(tx.location)} •{" "}
-                    {tx.card_type}
-                  </span>
-                </div>
-                <div className="flex flex-col items-end gap-2">
-                  <span
-                    className={`font-bold ${tx.is_third_party ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"}`}
-                  >
-                    - ₡{formatCurrency(Number(tx.amount))}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setSelectedTx(tx);
-                      setEditTxMerchant(tx.merchant);
-                      if (tx.is_third_party) {
-                        setEditTxCategory("THIRD_PARTY");
-                        setEditTxPersonId(tx.third_party_id || "");
-                      } else if (tx.is_base) {
-                        setEditTxCategory("FIXED");
-                        setEditTxPersonId("");
-                      } else {
-                        setEditTxCategory("PERSONAL");
-                        setEditTxPersonId("");
-                      }
-                      setEditModalOpen(true);
-                    }}
-                    // 1. ADDED: flex items-center justify-center gap-1
-                    className="flex items-center justify-center gap-1 text-[10px] px-3 py-1.5 rounded transition-colors font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 uppercase tracking-wider"
-                  >
-                    {tx.is_third_party ? (
-                      `FOR: ${tx.third_party_name}`
-                    ) : (
-                      <>
-                        {/* 2. FIXED: Removed the stray '}' and adjusted the size to 14px so it matches the 10px text */}
-                        <span className="material-symbols-outlined !text-[14px]">
-                          edit
-                        </span>
-                        EDIT
-                      </>
-                    )}
-                  </button>
-                </div>
-              </li>
-            ))}
+                  <div className="flex flex-col items-end gap-2">
+                    <span
+                      className={`font-bold ${tx.is_third_party ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"}`}
+                    >
+                      - ₡{formatCurrency(Number(tx.amount))}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSelectedTx(tx);
+                        setEditTxMerchant(tx.merchant);
+                        if (tx.is_third_party) {
+                          setEditTxCategory("THIRD_PARTY");
+                          setEditTxPersonId(tx.third_party_id || "");
+                        } else if (tx.is_base) {
+                          setEditTxCategory("FIXED");
+                          setEditTxPersonId("");
+                        } else {
+                          setEditTxCategory("PERSONAL");
+                          setEditTxPersonId("");
+                        }
+                        setEditModalOpen(true);
+                      }}
+                      className="flex items-center justify-center gap-1 text-[10px] px-3 py-1.5 rounded transition-colors font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 uppercase tracking-wider"
+                    >
+                      {tx.is_third_party ? (
+                        `FOR: ${tx.third_party_name}`
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined !text-[14px]">
+                            edit
+                          </span>
+                          EDIT
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </li>
+              ))
+            )}
           </ul>
-          <div className="p-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 text-center">
-            <button
-              onClick={() =>
-                alert("This will navigate to the full history page soon!")
-              }
-              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline uppercase tracking-wider"
-            >
-              Show all transactions
-            </button>
-          </div>
         </div>
       </div>
 
@@ -2512,7 +4574,7 @@ function App() {
                   type="date"
                   value={incomeDate}
                   onChange={(e) => setIncomeDate(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-green-500"
+                  className="w-1/2 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all [color-scheme:light] dark:[color-scheme:dark] cursor-pointer"
                 />
                 <button
                   onClick={handleSaveIncome}
@@ -2554,6 +4616,9 @@ function App() {
                       </div>
                       <span className="text-xs text-green-600 dark:text-green-400 font-bold mt-1">
                         + ₡{formatCurrency(Number(inc.amount))}
+                      </span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 font-mono">
+                        {formatDate(inc.date)}
                       </span>
                     </div>
                     <div className="flex gap-2">
@@ -2624,7 +4689,7 @@ function App() {
                   type="date"
                   value={fixedExpenseDate}
                   onChange={(e) => setFixedExpenseDate(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-red-500"
+                  className="w-1/2 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all [color-scheme:light] dark:[color-scheme:dark] cursor-pointer"
                 />
                 <button
                   onClick={handleSaveFixedExpense}
@@ -2655,6 +4720,9 @@ function App() {
                       </div>
                       <span className="text-xs text-red-600 dark:text-red-400 font-bold mt-1">
                         - ₡{formatCurrency(Number(exp.amount))}
+                      </span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 font-mono">
+                        {formatDate(exp.date)}
                       </span>
                     </div>
                     <div className="flex gap-2">
@@ -2690,6 +4758,7 @@ function App() {
           </div>
         </div>
       )}
+
       {/* --- NEW MODAL: MANAGE CARDS --- */}
       {isCardModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">

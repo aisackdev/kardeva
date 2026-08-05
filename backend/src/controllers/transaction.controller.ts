@@ -8,17 +8,26 @@ const getMonthFilter = (req: Request) => {
   );
 };
 
-// NEW: The brain of our billing system
+// UPGRADED: The brain of our billing system (Strict TypeScript Safe!)
 const calculateBillingMonth = (
   dateString: string,
   cutoffDay: number | null,
 ): string => {
-  const date = new Date(dateString);
-  let year = date.getFullYear();
-  let month = date.getMonth() + 1; // JavaScript months are 0-11
-  const day = date.getDate();
+  if (!dateString) return "";
 
-  // If we have a cutoff day and the purchase day is AFTER the cutoff, shift to next month!
+  // 1. Safe extraction: fallback to empty string if undefined
+  const datePart = dateString.split("T")[0] || "";
+  const dateElements = datePart.split("-");
+
+  // 2. Safely parse each element, defaulting to 0 if they don't exist
+  let year = Number(dateElements[0] || 0);
+  let month = Number(dateElements[1] || 0);
+  const day = Number(dateElements[2] || 0);
+
+  // Failsafe: if the date was malformed, just return the current year/month
+  if (!year || !month) return "";
+
+  // 3. If we have a cutoff day and the purchase day is AFTER the cutoff, shift to next month
   if (cutoffDay && day > cutoffDay) {
     month++;
     if (month > 12) {
@@ -27,7 +36,7 @@ const calculateBillingMonth = (
     }
   }
 
-  // Format back to YYYY-MM
+  // 4. Format back to YYYY-MM
   return `${year}-${month.toString().padStart(2, "0")}`;
 };
 
@@ -61,8 +70,11 @@ export const createTransaction = async (req: Request, res: Response) => {
         [lastFour],
       );
       if (cardResult.rows.length > 0) {
-        cardId = cardResult.rows[0].id;
-        cutoffDay = cardResult.rows[0].cutoff_day;
+        const foundCard = cardResult.rows[0];
+        if (foundCard) {
+          cardId = foundCard.id;
+          cutoffDay = foundCard.cutoff_day;
+        }
       }
     }
 
@@ -298,30 +310,60 @@ export const deleteTransaction = async (req: Request, res: Response) => {
 export const updateTransactionDetails = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    // 1. ADD 'date' to the destructured body
     const { merchant, amount, is_base, date } = req.body;
 
-    // 2. UPDATE the SQL query to include date = $4
+    // 1. Check if this transaction belongs to a card to apply cutoff rules
+    const txCheckQuery = await pool.query(
+      "SELECT card_id FROM transactions WHERE id = $1",
+      [id],
+    );
+
+    if (txCheckQuery.rowCount === 0) {
+      res.status(404).json({ error: "Transaction not found" });
+      return;
+    }
+
+    const cardId = txCheckQuery.rows[0].card_id;
+    let cutoffDay = null;
+
+    if (cardId) {
+      const cardCheckQuery = await pool.query(
+        "SELECT cutoff_day FROM cards WHERE id = $1",
+        [cardId],
+      );
+      if (cardCheckQuery.rows.length > 0) {
+        const foundCard = cardCheckQuery.rows[0];
+        if (foundCard) {
+          cutoffDay = foundCard.cutoff_day;
+        }
+      }
+    }
+
+    // 2. Recalculate the correct billing month with the new date
+    const newBillingMonth = calculateBillingMonth(date, cutoffDay);
+
+    // 3. UPDATE the SQL query to include billing_month = $5
     const updateQuery = `
       UPDATE transactions 
-      SET merchant = $1, amount = $2, is_base = $3, date = $4 
-      WHERE id = $5 
+      SET merchant = $1, amount = $2, is_base = $3, date = $4, billing_month = $5 
+      WHERE id = $6 
       RETURNING *;
     `;
 
-    // 3. Pass the date variable into the array
+    // 4. Execute with all 6 parameters
     const result = await pool.query(updateQuery, [
       merchant,
       amount,
       is_base,
       date,
+      newBillingMonth,
       id,
     ]);
 
     broadcast("transaction_updated", result.rows[0]);
     res.status(200).json({ transaction: result.rows[0] });
   } catch (error) {
-    console.error("Error updating income:", error);
+    console.error("Error updating transaction details:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

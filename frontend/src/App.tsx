@@ -471,12 +471,26 @@ function App() {
 
   const formatCurrency = (amount: number) =>
     amount.toLocaleString("es-CR", { maximumFractionDigits: 0 });
+
+  // NEW: Helper function to display dates safely in local timezone (Strict TS Safe)
   const formatDate = (dateString: string) => {
     if (!dateString) return "";
-    const [year, month, day] = dateString.split("T")[0].split("-");
-    const localDate = new Date(Number(year), Number(month) - 1, Number(day));
+
+    // Safely extract parts
+    const datePart = dateString.split("T")[0] || "";
+    const dateElements = datePart.split("-");
+
+    const year = Number(dateElements[0] || 0);
+    const month = Number(dateElements[1] || 0);
+    const day = Number(dateElements[2] || 0);
+
+    if (!year || !month || !day) return "Invalid Date";
+
+    // Creating a Date(year, monthIndex, day) forces local time at 00:00 AM
+    const localDate = new Date(year, month - 1, day);
     return localDate.toLocaleDateString();
   };
+
   const cleanLocation = (loc: string) =>
     loc ? loc.replace(/^[\s,]+/, "").trim() : "Unknown";
 
@@ -641,20 +655,20 @@ function App() {
               fetchIncomes();
               setIsIncomeModalOpen(true);
             }}
-            className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-green-400 transition-all group"
+            className="bg-green-50 dark:bg-green-950/30 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-green-900 flex flex-col cursor-pointer hover:ring-2 hover:ring-green-400 transition-all group"
           >
             <div className="flex justify-between items-center mb-1">
               <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">
                 Total Incomes
               </span>
               <span className="text-[10px] text-green-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                Edit ⚙️
+                Manage ⚙️
               </span>
             </div>
             <span className="text-xl font-extrabold text-green-600 dark:text-green-400">
               + ₡{formatCurrency(baseIncome + extraIncome)}
             </span>
-            <span className="text-[10px] text-gray-400 mt-1">
+            <span className="text-[10px] text-gray-500 mt-1">
               Base: ₡{formatCurrency(baseIncome)} | Extra: ₡
               {formatCurrency(extraIncome)}
             </span>
@@ -665,20 +679,20 @@ function App() {
               fetchFixedExpenses();
               setIsFixedModalOpen(true);
             }}
-            className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-red-400 transition-all group"
+            className="bg-red-50 dark:bg-red-950/30 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-red-900 flex flex-col cursor-pointer hover:ring-2 hover:ring-red-400 transition-all group"
           >
             <div className="flex justify-between items-center mb-1">
               <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">
                 My Expenses
               </span>
               <span className="text-[10px] text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                Manage Fixed ⚙️
+                Manage ⚙️
               </span>
             </div>
             <span className="text-xl font-extrabold text-red-600 dark:text-red-400">
               - ₡{formatCurrency(personalExpenses + fixedExpenses)}
             </span>
-            <span className="text-[10px] text-gray-400 mt-1">
+            <span className="text-[10px] text-gray-500 mt-1">
               Fixed: ₡{formatCurrency(fixedExpenses)} | Var: ₡
               {formatCurrency(personalExpenses)}
             </span>
@@ -686,11 +700,10 @@ function App() {
 
           <div
             onClick={() => setIsModalOpen(true)}
-            // FIXED: Changed dark:bg-orange-950/30 to dark:bg-gray-900 and dark:border-orange-900 to dark:border-gray-800
-            className="bg-orange-50 dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
+            className="bg-orange-50 dark:bg-orange-950/30 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-orange-900 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
           >
             <div className="flex justify-between items-center mb-1">
-              <span className="text-orange-700 dark:text-gray-400 text-xs font-semibold">
+              <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">
                 Lent to Others
               </span>
               <span className="text-[10px] text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -700,16 +713,13 @@ function App() {
             <span className="text-xl font-extrabold text-orange-600 dark:text-orange-400">
               - ₡{formatCurrency(thirdPartyExpenses)}
             </span>
-            <span className="text-[10px] text-orange-400 dark:text-gray-500 mt-1">
+            <span className="text-[10px] text-gray-500 mt-1xd">
               People: {thirdParties.length}
             </span>
           </div>
 
           {/* Card 4: Available Balance */}
-          <div
-            // FIXED: Changed dark:bg-indigo-950/50 to dark:bg-gray-900 and dark:border-indigo-900 to dark:border-gray-800
-            className="bg-gray-900 dark:bg-gray-900 p-5 rounded-xl shadow-md border border-gray-800 dark:border-gray-800 flex flex-col"
-          >
+          <div className="bg-gray-950 dark:bg-gray-800 p-5 rounded-xl shadow-md border border-gray-800 dark:border-gray-800 flex flex-col">
             <span className="text-gray-400 dark:text-gray-400 text-xs font-semibold mb-1">
               Available Balance
             </span>
@@ -721,11 +731,11 @@ function App() {
 
         {/* Transactions List */}
         <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden mt-6 transition-colors duration-300">
-          <div className="p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 flex justify-between items-center">
+          <div className="p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-100 dark:bg-gray-950 flex justify-between items-center">
             <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200">
               Monthly Transactions
             </h2>
-            {/* NEW: Counter badge */}
+            {/* Counter badge */}
             <span className="text-xs font-bold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 px-3 py-1 rounded-full">
               {transactions.length}
             </span>
@@ -1092,6 +1102,9 @@ function App() {
                       <span className="text-xs text-green-600 dark:text-green-400 font-bold mt-1">
                         + ₡{formatCurrency(Number(inc.amount))}
                       </span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 font-mono">
+                        {formatDate(inc.date)}
+                      </span>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -1192,6 +1205,9 @@ function App() {
                       </div>
                       <span className="text-xs text-red-600 dark:text-red-400 font-bold mt-1">
                         - ₡{formatCurrency(Number(exp.amount))}
+                      </span>
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 font-mono">
+                        {formatDate(exp.date)}
                       </span>
                     </div>
                     <div className="flex gap-2">
