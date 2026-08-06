@@ -17,8 +17,6 @@ services:
       dockerfile: Dockerfile.prod
     container_name: kardeva_backend_prod
     restart: always
-    ports:
-      - "3000:3000"
     depends_on:
       - postgres-db
     environment:
@@ -33,12 +31,22 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
       args:
-        # This will take the URL from the Oracle server's .env file
         - VITE_API_URL=${VITE_API_URL}
     container_name: kardeva_frontend_prod
     restart: always
-    ports:
-      - "80:80" # Standard HTTP port
+
+  # Cloudflare Tunnel Service
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: kardeva_tunnel
+    restart: always
+    # We pass the token we got from the Cloudflare Dashboard
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TOKEN}
+    depends_on:
+      - frontend
+      - backend
 
 volumes:
-  postgres_data_prod: # New volume so we don't mix with local data
+  postgres_data_prod:

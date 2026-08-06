@@ -230,7 +230,7 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
       id,
     ]);
 
-    if (result.rowCount === 0) {
+    if (result.rows.length === 0) {
       res.status(404).json({ error: "Transaction not found" });
       return;
     }
@@ -269,7 +269,7 @@ export const deleteTransaction = async (req: Request, res: Response) => {
     const checkQuery = "SELECT auth_code FROM transactions WHERE id = $1";
     const checkResult = await pool.query(checkQuery, [id]);
 
-    if (checkResult.rowCount === 0) {
+    if (checkResult.rows.length === 0) {
       res.status(404).json({ error: "Transaction not found" });
       return;
     }
@@ -318,7 +318,7 @@ export const updateTransactionDetails = async (req: Request, res: Response) => {
       [id],
     );
 
-    if (txCheckQuery.rowCount === 0) {
+    if (txCheckQuery.rows.length === 0) {
       res.status(404).json({ error: "Transaction not found" });
       return;
     }
