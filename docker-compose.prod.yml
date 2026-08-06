@@ -1,0 +1,44 @@
+# docker-compose.prod.yml
+services:
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: kardeva_postgres_prod
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-kardeva_admin}
+      POSTGRES_PASSWORD: ${DB_PASS:-rootless123}
+      POSTGRES_DB: ${DB_NAME:-kardeva_db}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: kardeva_backend_prod
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres-db
+    environment:
+      - DB_USER=${DB_USER:-kardeva_admin}
+      - DB_PASSWORD=${DB_PASS:-rootless123}
+      - DB_NAME=${DB_NAME:-kardeva_db}
+      - DB_HOST=postgres-db
+      - DB_PORT=5432
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        # This will take the URL from the Oracle server's .env file
+        - VITE_API_URL=${VITE_API_URL}
+    container_name: kardeva_frontend_prod
+    restart: always
+    ports:
+      - "80:80" # Standard HTTP port
+
+volumes:
+  postgres_data_prod: # New volume so we don't mix with local data
