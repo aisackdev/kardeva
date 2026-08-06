@@ -11,9 +11,21 @@ import { addClient, removeClient } from "./sse.js";
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
+const allowedOrigins = [
+  "http://localhost:5173", // For local dev
+  "https://kardeva.app", // For production root domain
+];
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like Postman or curl) or allowed origins
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
   }),
 );
 
