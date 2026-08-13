@@ -1,5 +1,11 @@
 import { useEffect, useState } from "react";
-import type { Transaction, ChartData, ThirdParty, Card } from "./types";
+import type {
+  Transaction,
+  ChartData,
+  ThirdParty,
+  Card,
+  DbStatusResponse,
+} from "./types";
 import {
   BarChart,
   Bar,
@@ -11,6 +17,14 @@ import {
 } from "recharts";
 
 function App() {
+  // --- NEW: AUTHENTICATION STATES ---
+  const [token, setToken] = useState<string | null>(
+    localStorage.getItem("kardeva_token"),
+  );
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [chartRange, setChartRange] = useState<number | "ALL">("ALL");
@@ -64,7 +78,6 @@ function App() {
   const [fixedExpenseDate, setFixedExpenseDate] =
     useState<string>(getTodayDate());
 
-  // NEW: State for the global month filter (Default to current YYYY-MM)
   const getCurrentMonth = () => {
     const now = new Date();
     const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
@@ -72,7 +85,6 @@ function App() {
   };
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonth());
 
-  // NEW: Cards Modal States
   const [cardsList, setCardsList] = useState<Card[]>([]);
   const [isCardModalOpen, setIsCardModalOpen] = useState<boolean>(false);
   const [cardName, setCardName] = useState<string>("");
@@ -81,20 +93,16 @@ function App() {
   const [cardCutoff, setCardCutoff] = useState<string>("");
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
 
-  // --- NEW: DARK MODE LOGIC ---
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
-    // Check if user has a preference saved in their browser
     if (typeof window !== "undefined") {
       const savedTheme = localStorage.getItem("theme");
       if (savedTheme) return savedTheme === "dark";
-      // If no preference, check system settings
       return window.matchMedia("(prefers-color-scheme: dark)").matches;
     }
     return false;
   });
 
   useEffect(() => {
-    // Apply the class to the root <html> element based on state
     const root = document.documentElement;
     if (isDarkMode) {
       root.classList.add("dark");
@@ -104,42 +112,80 @@ function App() {
       localStorage.setItem("theme", "light");
     }
   }, [isDarkMode]);
-  // ----------------------------
 
-  // --- API FETCHING ---
-  const fetchChartData = () => {
+  // --- NEW: AUTHENTICATION FUNCTIONS ---
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL;
+      const res = await fetch(`${apiUrl}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await res.json();
+      if (data.token) {
+        localStorage.setItem("kardeva_token", data.token);
+        setToken(data.token);
+      } else {
+        setLoginError(data.error || "Login failed");
+      }
+    } catch (err) {
+      setLoginError("Could not connect to server");
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("kardeva_token");
+    setToken(null);
+  };
+
+  // Helper function to inject the Token into every fetch request
+  const fetchWithAuth = async (endpoint: string, options: RequestInit = {}) => {
     const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/chart?month=${selectedMonth}`)
+    const headers = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`, // Pass the token!
+      ...options.headers,
+    };
+
+    const response = await fetch(`${apiUrl}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      // If token is invalid, log out the user
+      handleLogout();
+      throw new Error("Unauthorized");
+    }
+    return response;
+  };
+
+  // --- API FETCHING (UPDATED TO USE fetchWithAuth) ---
+  const fetchChartData = () => {
+    fetchWithAuth(`/api/transactions/chart?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.chartData) {
-          // 1. Get the year and month from the selector
           const [year, month] = selectedMonth.split("-");
-
-          // 2. Magic trick to find out exactly how many days this month has (28, 30, or 31)
           const daysInMonth = new Date(
             Number(year),
             Number(month),
             0,
           ).getDate();
 
-          // 3. We create an array with exactly that many days and fill it
           const fullMonthData = Array.from({ length: daysInMonth }, (_, i) => {
-            // Build the string matching Postgres format (e.g. "2026-07-05")
             const dayString = `${year}-${month}-${String(i + 1).padStart(2, "0")}`;
-
-            // Search if the backend gave us any data for this exact day
             const foundData = data.chartData.find(
               (d: ChartData) => d.day === dayString,
             );
-
             return {
               day: dayString,
-              total: foundData ? foundData.total : 0, // Put 0 if we didn't spend anything
+              total: foundData ? foundData.total : 0,
             };
           });
-
-          // 4. Save the perfect array!
           setChartData(fullMonthData);
         }
       })
@@ -147,8 +193,7 @@ function App() {
   };
 
   const fetchTransactions = () => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions?month=${selectedMonth}`)
+    fetchWithAuth(`/api/transactions?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.transactions) setTransactions(data.transactions);
@@ -156,8 +201,7 @@ function App() {
   };
 
   const fetchSummary = () => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/summary?month=${selectedMonth}`)
+    fetchWithAuth(`/api/transactions/summary?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.personalExpenses !== undefined) {
@@ -171,8 +215,7 @@ function App() {
   };
 
   const fetchFixedExpenses = () => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/fixed-expenses?month=${selectedMonth}`)
+    fetchWithAuth(`/api/transactions/fixed-expenses?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.fixedExpenses) setFixedExpensesList(data.fixedExpenses);
@@ -181,12 +224,10 @@ function App() {
 
   const handleSaveFixedExpense = () => {
     if (!fixedExpenseName.trim() || !fixedExpenseAmount) return;
-    const apiUrl = import.meta.env.VITE_API_URL;
 
     if (editingFixedId) {
-      fetch(`${apiUrl}/api/transactions/${editingFixedId}`, {
+      fetchWithAuth(`/api/transactions/${editingFixedId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           merchant: fixedExpenseName,
           amount: Number(fixedExpenseAmount),
@@ -206,9 +247,8 @@ function App() {
         type: "EXPENSE",
         is_base: true,
       };
-      fetch(`${apiUrl}/api/transactions`, {
+      fetchWithAuth(`/api/transactions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newFixed),
       }).then(() => resetFixedForm());
     }
@@ -223,8 +263,7 @@ function App() {
   };
 
   const fetchThirdParties = () => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/third-parties`)
+    fetchWithAuth(`/api/third-parties`)
       .then((res) => res.json())
       .then((data) => {
         if (data.thirdParties) setThirdParties(data.thirdParties);
@@ -232,34 +271,27 @@ function App() {
   };
 
   const fetchIncomes = () => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/incomes?month=${selectedMonth}`)
+    fetchWithAuth(`/api/transactions/incomes?month=${selectedMonth}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.incomes) setIncomesList(data.incomes);
       });
   };
 
-  // NEW: Fetch Cards
   const fetchCards = () => {
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/cards`)
+    fetchWithAuth(`/api/cards`)
       .then((res) => res.json())
       .then((data) => {
         if (data.cards) setCardsList(data.cards);
       });
   };
 
-  // NEW: Save Card
   const handleSaveCard = () => {
     if (!cardName.trim() || !cardLastFour.trim() || !cardCutoff) return;
-    const apiUrl = import.meta.env.VITE_API_URL;
 
     if (editingCardId) {
-      // EDIT MODE
-      fetch(`${apiUrl}/api/cards/${editingCardId}`, {
+      fetchWithAuth(`/api/cards/${editingCardId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: cardName,
           last_four: cardLastFour,
@@ -273,10 +305,8 @@ function App() {
           else resetCardForm();
         });
     } else {
-      // ADD MODE
-      fetch(`${apiUrl}/api/cards`, {
+      fetchWithAuth(`/api/cards`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: cardName,
           last_four: cardLastFour,
@@ -303,23 +333,31 @@ function App() {
 
   const handleDeleteCard = (id: string) => {
     if (!confirm("Delete this card?")) return;
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/cards/${id}`, { method: "DELETE" }).then(() =>
+    fetchWithAuth(`/api/cards/${id}`, { method: "DELETE" }).then(() =>
       fetchCards(),
     );
   };
 
+  // FIRST EFFECT: Data that depends on month (Only runs if authenticated)
   useEffect(() => {
-    const apiUrl = import.meta.env.VITE_API_URL;
+    if (!token) return;
     fetchTransactions();
     fetchSummary();
     fetchChartData();
-    fetchThirdParties();
     fetchIncomes();
     fetchFixedExpenses();
+  }, [selectedMonth, token]);
+
+  // SECOND EFFECT: Static data and SSE Connection (Only runs if authenticated)
+  useEffect(() => {
+    if (!token) return;
+    const apiUrl = import.meta.env.VITE_API_URL;
+
+    fetchThirdParties();
     fetchCards();
 
-    const eventSource = new EventSource(`${apiUrl}/api/stream`);
+    // Attach token to URL so the backend middleware can read it
+    const eventSource = new EventSource(`${apiUrl}/api/stream?token=${token}`);
 
     const updateAll = () => {
       fetchTransactions();
@@ -337,14 +375,12 @@ function App() {
     return () => {
       eventSource.close();
     };
-  }, [selectedMonth]);
+  }, [token]);
 
   const handleAddPerson = () => {
     if (!newPersonName.trim()) return;
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/third-parties`, {
+    fetchWithAuth(`/api/third-parties`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newPersonName }),
     })
       .then((res) => res.json())
@@ -359,10 +395,8 @@ function App() {
 
   const handleUpdatePerson = (id: string) => {
     if (!editName.trim()) return;
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/third-parties/${id}`, {
+    fetchWithAuth(`/api/third-parties/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: editName }),
     })
       .then((res) => res.json())
@@ -383,14 +417,11 @@ function App() {
       )
     )
       return;
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/third-parties/${id}`, { method: "DELETE" }).then(
-      () => {
-        fetchThirdParties();
-        fetchTransactions();
-        fetchSummary();
-      },
-    );
+    fetchWithAuth(`/api/third-parties/${id}`, { method: "DELETE" }).then(() => {
+      fetchThirdParties();
+      fetchTransactions();
+      fetchSummary();
+    });
   };
 
   const handleSaveRecentTx = () => {
@@ -399,11 +430,9 @@ function App() {
       alert("Please select a person.");
       return;
     }
-    const apiUrl = import.meta.env.VITE_API_URL;
 
-    fetch(`${apiUrl}/api/transactions/${selectedTx.id}/edit`, {
+    fetchWithAuth(`/api/transactions/${selectedTx.id}/edit`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         merchant: editTxMerchant,
         is_base: editTxCategory === "FIXED",
@@ -419,12 +448,10 @@ function App() {
 
   const handleSaveIncome = () => {
     if (!incomeSource.trim() || !incomeAmount) return;
-    const apiUrl = import.meta.env.VITE_API_URL;
 
     if (editingIncomeId) {
-      fetch(`${apiUrl}/api/transactions/${editingIncomeId}`, {
+      fetchWithAuth(`/api/transactions/${editingIncomeId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           merchant: incomeSource,
           amount: Number(incomeAmount),
@@ -444,9 +471,8 @@ function App() {
         type: "INCOME",
         is_base: isBaseIncome,
       };
-      fetch(`${apiUrl}/api/transactions`, {
+      fetchWithAuth(`/api/transactions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newIncome),
       }).then(() => resetIncomeForm());
     }
@@ -463,8 +489,7 @@ function App() {
 
   const handleDeleteIncome = (id: string) => {
     if (!confirm("Delete this income?")) return;
-    const apiUrl = import.meta.env.VITE_API_URL;
-    fetch(`${apiUrl}/api/transactions/${id}`, { method: "DELETE" }).then(() =>
+    fetchWithAuth(`/api/transactions/${id}`, { method: "DELETE" }).then(() =>
       fetchIncomes(),
     );
   };
@@ -472,21 +497,14 @@ function App() {
   const formatCurrency = (amount: number) =>
     amount.toLocaleString("es-CR", { maximumFractionDigits: 0 });
 
-  // NEW: Helper function to display dates safely in local timezone (Strict TS Safe)
   const formatDate = (dateString: string) => {
     if (!dateString) return "";
-
-    // Safely extract parts
     const datePart = dateString.split("T")[0] || "";
     const dateElements = datePart.split("-");
-
     const year = Number(dateElements[0] || 0);
     const month = Number(dateElements[1] || 0);
     const day = Number(dateElements[2] || 0);
-
     if (!year || !month || !day) return "Invalid Date";
-
-    // Creating a Date(year, monthIndex, day) forces local time at 00:00 AM
     const localDate = new Date(year, month - 1, day);
     return localDate.toLocaleDateString();
   };
@@ -494,13 +512,76 @@ function App() {
   const cleanLocation = (loc: string) =>
     loc ? loc.replace(/^[\s,]+/, "").trim() : "Unknown";
 
-  // NEW: Calculate which data to display based on the selected range
-  // .slice(-7) takes the last 7 items from the array
   const displayedChartData =
     chartRange === "ALL" ? chartData : chartData.slice(-chartRange);
 
+  // --- RENDER 1: LOGIN SCREEN ---
+  if (!token) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-6 transition-colors duration-300">
+        <div className="absolute top-6 right-6">
+          <button
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors flex items-center justify-center"
+          >
+            <span className="material-symbols-outlined text-indigo-900 dark:text-yellow-400 text-3xl">
+              {isDarkMode ? "light_mode" : "dark_mode"}
+            </span>
+          </button>
+        </div>
+        <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-xl w-full max-w-sm border border-gray-100 dark:border-gray-800">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-extrabold text-gray-800 dark:text-white">
+              Kardeva
+            </h1>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">
+              Secure Financial Dashboard
+            </p>
+          </div>
+          <form onSubmit={handleLogin} className="flex flex-col gap-4">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 block">
+                Username
+              </label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 block">
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                required
+              />
+            </div>
+            {loginError && (
+              <p className="text-red-500 text-xs font-bold text-center">
+                {loginError}
+              </p>
+            )}
+            <button
+              type="submit"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mt-4 transition-colors shadow-md"
+            >
+              Sign In
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // --- RENDER 2: MAIN DASHBOARD ---
   return (
-    // Added dark mode transitions to the main wrapper
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6 flex flex-col items-center relative transition-colors duration-300">
       <div className="w-full max-w-4xl">
         {/* Header Section */}
@@ -515,7 +596,6 @@ function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* NEW: Manage Cards Button */}
             <button
               onClick={() => setIsCardModalOpen(true)}
               className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300"
@@ -526,20 +606,16 @@ function App() {
               </span>
             </button>
 
-            {/* NEW: Month Picker */}
+            {/* Custom Native Month Picker with Google Icon */}
             <div className="relative flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-colors cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/80">
-              {/* 1. Google Material Icon (calendar_month) */}
               <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 mr-2 text-[20px] pointer-events-none">
                 calendar_month
               </span>
-
-              {/* 2. The invisible-but-functional native input */}
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 onClick={(e) => {
-                  // This tells the browser to force-open the calendar popup when clicking
                   try {
                     (e.target as HTMLInputElement).showPicker();
                   } catch (err) {}
@@ -563,18 +639,25 @@ function App() {
                 </span>
               )}
             </button>
+
+            {/* NEW: Logout Button */}
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 transition-colors flex items-center justify-center"
+              title="Logout"
+            >
+              <span className="material-symbols-outlined text-2xl">logout</span>
+            </button>
           </div>
         </header>
 
         {/* Chart Section */}
         <div className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 mb-6 transition-colors duration-300">
-          {/* Header & Filters */}
           <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-2">
             <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200">
               Expenses Overview
             </h2>
 
-            {/* NEW: Chart Range Filters */}
             <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
               <button
                 onClick={() => setChartRange(7)}
@@ -603,10 +686,8 @@ function App() {
             </div>
           </div>
 
-          {/* The Chart */}
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              {/* UPDATED: We feed it the sliced data! */}
               <BarChart data={displayedChartData}>
                 <CartesianGrid
                   strokeDasharray="3 3"
@@ -618,7 +699,6 @@ function App() {
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: "#9ca3af", fontSize: 12 }}
-                  /* UPDATED: Since showing 31 dates like "2026-07-22" takes too much space, we format it to only show the Day number (e.g. "22") */
                   tickFormatter={(val) => val.split("-")[2]}
                 />
                 <YAxis
@@ -635,7 +715,6 @@ function App() {
                     color: isDarkMode ? "#fff" : "#000",
                     borderRadius: "8px",
                   }}
-                  /* UPDATED: Show the formatted local date in the hover box */
                   labelFormatter={(label) => formatDate(label)}
                   formatter={(value: any) => [
                     `₡${formatCurrency(Number(value))}`,
@@ -662,7 +741,7 @@ function App() {
                 Total Incomes
               </span>
               <span className="text-[10px] text-green-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                Manage ⚙️
+                Edit ⚙️
               </span>
             </div>
             <span className="text-xl font-extrabold text-green-600 dark:text-green-400">
@@ -700,10 +779,10 @@ function App() {
 
           <div
             onClick={() => setIsModalOpen(true)}
-            className="bg-orange-50 dark:bg-orange-950/30 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-orange-900 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
+            className="bg-orange-50 dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
           >
             <div className="flex justify-between items-center mb-1">
-              <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">
+              <span className="text-orange-700 dark:text-gray-400 text-xs font-semibold">
                 Lent to Others
               </span>
               <span className="text-[10px] text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -713,13 +792,12 @@ function App() {
             <span className="text-xl font-extrabold text-orange-600 dark:text-orange-400">
               - ₡{formatCurrency(thirdPartyExpenses)}
             </span>
-            <span className="text-[10px] text-gray-500 mt-1xd">
+            <span className="text-[10px] text-gray-500 mt-1">
               People: {thirdParties.length}
             </span>
           </div>
 
-          {/* Card 4: Available Balance */}
-          <div className="bg-gray-950 dark:bg-gray-800 p-5 rounded-xl shadow-md border border-gray-800 dark:border-gray-800 flex flex-col">
+          <div className="bg-gray-950 dark:bg-gray-900 p-5 rounded-xl shadow-md border border-gray-800 dark:border-gray-800 flex flex-col">
             <span className="text-gray-400 dark:text-gray-400 text-xs font-semibold mb-1">
               Available Balance
             </span>
@@ -735,13 +813,11 @@ function App() {
             <h2 className="text-lg font-bold text-gray-700 dark:text-gray-200">
               Monthly Transactions
             </h2>
-            {/* Counter badge */}
             <span className="text-xs font-bold bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 px-3 py-1 rounded-full">
               {transactions.length}
             </span>
           </div>
 
-          {/* NEW: max-h-[400px] overflow-y-auto custom-scrollbar makes this specific section scrollable! */}
           <ul className="divide-y divide-gray-100 dark:divide-gray-800 max-h-[400px] overflow-y-auto custom-scrollbar">
             {transactions.length === 0 ? (
               <li className="p-6 text-center text-gray-400">
@@ -807,15 +883,16 @@ function App() {
         </div>
       </div>
 
-      {/* --- ALL MODALS WITH DARK MODE --- */}
+      {/* --- ALL MODALS --- */}
 
       {/* Third Parties Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
             <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
-                Manage People
+              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <span className="material-symbols-outlined">group</span> Manage
+                People
               </h2>
               <button
                 onClick={() => {
@@ -882,16 +959,20 @@ function App() {
                             setEditingId(person.id);
                             setEditName(person.name);
                           }}
-                          className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
+                          className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
                         >
-                          Edit
+                          <span className="material-symbols-outlined !text-[14px]">
+                            edit
+                          </span>
                         </button>
                       )}
                       <button
                         onClick={() => handleDeletePerson(person.id)}
-                        className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
+                        className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
                       >
-                        Delete
+                        <span className="material-symbols-outlined !text-[14px]">
+                          delete
+                        </span>
                       </button>
                     </div>
                   </li>
@@ -1024,7 +1105,8 @@ function App() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
             <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
+              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <span className="material-symbols-outlined">payments</span>{" "}
                 Manage Incomes
               </h2>
               <button
@@ -1115,15 +1197,19 @@ function App() {
                           setIsBaseIncome(inc.is_base);
                           setIncomeDate(inc.date.split("T")[0]);
                         }}
-                        className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
+                        className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
                       >
-                        Edit
+                        <span className="material-symbols-outlined !text-[14px]">
+                          edit
+                        </span>
                       </button>
                       <button
                         onClick={() => handleDeleteIncome(inc.id)}
-                        className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
+                        className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
                       >
-                        Delete
+                        <span className="material-symbols-outlined !text-[14px]">
+                          delete
+                        </span>
                       </button>
                     </div>
                   </li>
@@ -1139,7 +1225,8 @@ function App() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
             <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
-              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
+              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <span className="material-symbols-outlined">receipt_long</span>{" "}
                 Manage Fixed Expenses
               </h2>
               <button
@@ -1218,22 +1305,25 @@ function App() {
                           setFixedExpenseAmount(exp.amount);
                           setFixedExpenseDate(exp.date.split("T")[0]);
                         }}
-                        className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
+                        className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
                       >
-                        Edit
+                        <span className="material-symbols-outlined !text-[14px]">
+                          edit
+                        </span>
                       </button>
                       <button
                         onClick={() => {
                           if (confirm("Delete this fixed expense?")) {
-                            const apiUrl = import.meta.env.VITE_API_URL;
-                            fetch(`${apiUrl}/api/transactions/${exp.id}`, {
+                            fetchWithAuth(`/api/transactions/${exp.id}`, {
                               method: "DELETE",
-                            });
+                            }).then(() => fetchFixedExpenses());
                           }
                         }}
-                        className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
+                        className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
                       >
-                        Delete
+                        <span className="material-symbols-outlined !text-[14px]">
+                          delete
+                        </span>
                       </button>
                     </div>
                   </li>

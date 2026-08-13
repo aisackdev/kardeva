@@ -5,8 +5,10 @@ import systemRoutes from "./routes/system.routes.js";
 import transactionRoutes from "./routes/transaction.routes.js";
 import thirdPartyRoutes from "./routes/thirdParty.routes.js";
 import cardRoutes from "./routes/card.routes.js";
+import authRoutes from "./routes/auth.routes.js";
 import { initDB } from "./db.js";
 import { addClient, removeClient } from "./sse.js";
+import { verifyToken } from "./middleware/auth.middleware.js";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
@@ -31,23 +33,25 @@ app.use(
 
 app.use(express.json());
 
-// Routes
-app.use("/", systemRoutes);
-app.use("/api/transactions", transactionRoutes);
-app.use("/api/third-parties", thirdPartyRoutes);
-app.use("/api/cards", cardRoutes);
+// PUBLIC ROUTES (No token required)
+app.use("/api/auth", authRoutes); // <-- Login route
+app.use("/", systemRoutes); // Root welcome message
 
-app.get("/api/stream", (req, res) => {
-  // Required headers for SSE
+// PRIVATE ROUTES (Protected by verifyToken middleware)
+app.use("/api/transactions", verifyToken, transactionRoutes);
+app.use("/api/third-parties", verifyToken, thirdPartyRoutes);
+app.use("/api/cards", verifyToken, cardRoutes);
+
+// SSE Stream also needs protection (we pass the token in the URL query)
+app.get("/api/stream", verifyToken, (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
-  res.flushHeaders(); // Establish the connection immediately
+  res.flushHeaders();
 
-  addClient(res); // Add user to our list
+  addClient(res);
   console.log("Client connected to SSE stream");
 
-  // If user closes the browser, remove them from the list
   req.on("close", () => {
     removeClient(res);
     console.log("Client disconnected");
