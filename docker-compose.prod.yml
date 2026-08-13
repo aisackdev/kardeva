@@ -25,6 +25,10 @@ services:
       - DB_NAME=${DB_NAME:-kardeva_db}
       - DB_HOST=postgres-db
       - DB_PORT=5432
+      - ADMIN_USER=${ADMIN_USER}
+      - ADMIN_PASS=${ADMIN_PASS}
+      - JWT_SECRET=${JWT_SECRET}
+      - BOT_API_KEY=${BOT_API_KEY}
 
   frontend:
     build:
