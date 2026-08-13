@@ -1,11 +1,5 @@
 import { useEffect, useState } from "react";
-import type {
-  Transaction,
-  ChartData,
-  ThirdParty,
-  Card,
-  DbStatusResponse,
-} from "./types";
+import type { Transaction, ChartData, ThirdParty, Card } from "./types";
 import {
   BarChart,
   Bar,
