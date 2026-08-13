@@ -18,3 +18,9 @@ export const broadcast = (event: string, data: any) => {
     client.write(`data: ${JSON.stringify(data)}\n\n`);
   });
 };
+
+setInterval(() => {
+  clients.forEach((client) => {
+    client.write(`: keep-alive-ping\n\n`);
+  });
+}, 30000);
