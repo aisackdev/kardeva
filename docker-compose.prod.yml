@@ -10,6 +10,10 @@ services:
       POSTGRES_DB: ${DB_NAME:-kardeva_db}
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
+  adminer:
+    image: adminer
+    container_name: kardeva_adminer_prod
+    restart: always
 
   backend:
     build:
