@@ -1,3 +1,4 @@
+// backend/src/index.ts
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -13,42 +14,44 @@ import { verifyToken } from "./middleware/auth.middleware.js";
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
-const allowedOrigins = [
-  "http://localhost:5173", // For local dev
-  "https://kardeva.app", // For production root domain
-];
-
+// UPGRADED: A cleaner, bulletproof CORS configuration native to the package
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like Postman or curl) or allowed origins
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin: ["http://localhost:5173", "https://kardeva.app"],
+    credentials: true, // Allow cookies and auth headers securely
   }),
 );
 
 app.use(express.json());
 
-// PUBLIC ROUTES (No token required)
-app.use("/api/auth", authRoutes); // <-- Login route
-app.use("/", systemRoutes); // Root welcome message
+// PUBLIC ROUTES
+app.use("/api/auth", authRoutes);
+app.use("/", systemRoutes);
 
-// PRIVATE ROUTES (Protected by verifyToken middleware)
+// PRIVATE ROUTES
 app.use("/api/transactions", verifyToken, transactionRoutes);
 app.use("/api/third-parties", verifyToken, thirdPartyRoutes);
 app.use("/api/cards", verifyToken, cardRoutes);
 
-// SSE Stream also needs protection (we pass the token in the URL query)
+// SSE Stream
 app.get("/api/stream", verifyToken, (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
+
+  // NEW: Double-check CORS specifically for the stream (Cloudflare fallback)
+  const origin = req.headers.origin;
+  if (origin === "https://kardeva.app" || origin === "http://localhost:5173") {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  // Push the headers down the pipe
   res.flushHeaders();
+
+  // THE MAGIC FIX: Send an immediate blank comment payload.
+  // This forces Cloudflare/Nginx to release the buffered headers instantly to the browser!
+  res.write(": connected\n\n");
 
   addClient(res);
   console.log("Client connected to SSE stream");
