@@ -23,4 +23,4 @@ setInterval(() => {
   clients.forEach((client) => {
     client.write(`: keep-alive-ping\n\n`);
   });
-}, 30000);
+}, 15000);

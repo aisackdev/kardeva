@@ -351,7 +351,9 @@ function App() {
     fetchCards();
 
     // Attach token to URL so the backend middleware can read it
-    const eventSource = new EventSource(`${apiUrl}/api/stream?token=${token}`);
+    const eventSource = new EventSource(`${apiUrl}/api/stream?token=${token}`, {
+      withCredentials: true,
+    });
 
     const updateAll = () => {
       fetchTransactions();

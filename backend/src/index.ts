@@ -36,9 +36,10 @@ app.use("/api/cards", verifyToken, cardRoutes);
 // SSE Stream
 app.get("/api/stream", verifyToken, (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
 
   // NEW: Double-check CORS specifically for the stream (Cloudflare fallback)
   const origin = req.headers.origin;
@@ -46,12 +47,10 @@ app.get("/api/stream", verifyToken, (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", origin);
   }
 
-  // Push the headers down the pipe
-  res.flushHeaders();
+  res.write(":" + " ".repeat(2048) + "\n\n");
 
-  // THE MAGIC FIX: Send an immediate blank comment payload.
-  // This forces Cloudflare/Nginx to release the buffered headers instantly to the browser!
-  res.write(": connected\n\n");
+  // Send an initial handshake event
+  res.write(`data: {"status": "connected"}\n\n`);
 
   addClient(res);
   console.log("Client connected to SSE stream");
