@@ -2854,35 +2854,6 @@ export const deleteThirdParty = async (req: Request, res: Response) => {
 };
 </file>
 
-<file path="backend/src/sse.ts">
-import type { Response } from "express";
-
-// Array to store all connected users (browsers)
-let clients: Response[] = [];
-
-export const addClient = (res: Response) => {
-  clients.push(res);
-};
-
-export const removeClient = (res: Response) => {
-  clients = clients.filter((client) => client !== res);
-};
-
-// Function to send a message to everyone
-export const broadcast = (event: string, data: any) => {
-  clients.forEach((client) => {
-    client.write(`event: ${event}\n`);
-    client.write(`data: ${JSON.stringify(data)}\n\n`);
-  });
-};
-
-setInterval(() => {
-  clients.forEach((client) => {
-    client.write(`: keep-alive-ping\n\n`);
-  });
-}, 30000);
-</file>
-
 <file path="backend/package.json">
 {
   "name": "backend",
@@ -3030,6 +3001,35 @@ postgres_data/
 .DS_Store
 .vscode/
 .idea/
+</file>
+
+<file path="backend/src/sse.ts">
+import type { Response } from "express";
+
+// Array to store all connected users (browsers)
+let clients: Response[] = [];
+
+export const addClient = (res: Response) => {
+  clients.push(res);
+};
+
+export const removeClient = (res: Response) => {
+  clients = clients.filter((client) => client !== res);
+};
+
+// Function to send a message to everyone
+export const broadcast = (event: string, data: any) => {
+  clients.forEach((client) => {
+    client.write(`event: ${event}\n`);
+    client.write(`data: ${JSON.stringify(data)}\n\n`);
+  });
+};
+
+setInterval(() => {
+  clients.forEach((client) => {
+    client.write(`: keep-alive-ping\n\n`);
+  });
+}, 15000);
 </file>
 
 <file path="frontend/src/index.css">
@@ -3673,6 +3673,7 @@ export const getFixedExpenses = async (req: Request, res: Response) => {
 </file>
 
 <file path="backend/src/index.ts">
+// backend/src/index.ts
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -3688,42 +3689,43 @@ import { verifyToken } from "./middleware/auth.middleware.js";
 const app = express();
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
-const allowedOrigins = [
-  "http://localhost:5173", // For local dev
-  "https://kardeva.app", // For production root domain
-];
-
+// UPGRADED: A cleaner, bulletproof CORS configuration native to the package
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like Postman or curl) or allowed origins
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin: ["http://localhost:5173", "https://kardeva.app"],
+    credentials: true, // Allow cookies and auth headers securely
   }),
 );
 
 app.use(express.json());
 
-// PUBLIC ROUTES (No token required)
-app.use("/api/auth", authRoutes); // <-- Login route
-app.use("/", systemRoutes); // Root welcome message
+// PUBLIC ROUTES
+app.use("/api/auth", authRoutes);
+app.use("/", systemRoutes);
 
-// PRIVATE ROUTES (Protected by verifyToken middleware)
+// PRIVATE ROUTES
 app.use("/api/transactions", verifyToken, transactionRoutes);
 app.use("/api/third-parties", verifyToken, thirdPartyRoutes);
 app.use("/api/cards", verifyToken, cardRoutes);
 
-// SSE Stream also needs protection (we pass the token in the URL query)
+// SSE Stream
 app.get("/api/stream", verifyToken, (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
+
+  // NEW: Double-check CORS specifically for the stream (Cloudflare fallback)
+  const origin = req.headers.origin;
+  if (origin === "https://kardeva.app" || origin === "http://localhost:5173") {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  res.write(":" + " ".repeat(2048) + "\n\n");
+
+  // Send an initial handshake event
+  res.write(`data: {"status": "connected"}\n\n`);
 
   addClient(res);
   console.log("Client connected to SSE stream");
@@ -4095,7 +4097,9 @@ function App() {
     fetchCards();
 
     // Attach token to URL so the backend middleware can read it
-    const eventSource = new EventSource(`${apiUrl}/api/stream?token=${token}`);
+    const eventSource = new EventSource(`${apiUrl}/api/stream?token=${token}`, {
+      withCredentials: true,
+    });
 
     const updateAll = () => {
       fetchTransactions();

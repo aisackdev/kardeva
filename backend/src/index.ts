@@ -35,21 +35,18 @@ app.use("/api/cards", verifyToken, cardRoutes);
 
 // SSE Stream
 app.get("/api/stream", verifyToken, (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
+  // UPGRADED: writeHead sends the headers instantly, bypassing any proxy delays
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
 
-  // NEW: Double-check CORS specifically for the stream (Cloudflare fallback)
-  const origin = req.headers.origin;
-  if (origin === "https://kardeva.app" || origin === "http://localhost:5173") {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
+  // The Buffer Buster: Force Cloudflare to flush immediately
   res.write(":" + " ".repeat(2048) + "\n\n");
 
-  // Send an initial handshake event
+  // Initial handshake
   res.write(`data: {"status": "connected"}\n\n`);
 
   addClient(res);

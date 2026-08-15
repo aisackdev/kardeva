@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { Transaction, ChartData, ThirdParty, Card } from "./types";
 import {
   BarChart,
@@ -78,6 +78,11 @@ function App() {
     return localNow.toISOString().substring(0, 7); // Extracts "YYYY-MM"
   };
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonth());
+
+  const selectedMonthRef = useRef(selectedMonth);
+  useEffect(() => {
+    selectedMonthRef.current = selectedMonth;
+  }, [selectedMonth]);
 
   const [cardsList, setCardsList] = useState<Card[]>([]);
   const [isCardModalOpen, setIsCardModalOpen] = useState<boolean>(false);
@@ -159,7 +164,7 @@ function App() {
 
   // --- API FETCHING (UPDATED TO USE fetchWithAuth) ---
   const fetchChartData = () => {
-    fetchWithAuth(`/api/transactions/chart?month=${selectedMonth}`)
+    fetchWithAuth(`/api/transactions/chart?month=${selectedMonthRef.current}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.chartData) {
@@ -187,7 +192,7 @@ function App() {
   };
 
   const fetchTransactions = () => {
-    fetchWithAuth(`/api/transactions?month=${selectedMonth}`)
+    fetchWithAuth(`/api/transactions?month=${selectedMonthRef.current}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.transactions) setTransactions(data.transactions);
@@ -195,7 +200,7 @@ function App() {
   };
 
   const fetchSummary = () => {
-    fetchWithAuth(`/api/transactions/summary?month=${selectedMonth}`)
+    fetchWithAuth(`/api/transactions/summary?month=${selectedMonthRef.current}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.personalExpenses !== undefined) {
@@ -209,7 +214,9 @@ function App() {
   };
 
   const fetchFixedExpenses = () => {
-    fetchWithAuth(`/api/transactions/fixed-expenses?month=${selectedMonth}`)
+    fetchWithAuth(
+      `/api/transactions/fixed-expenses?month=${selectedMonthRef.current}`,
+    )
       .then((res) => res.json())
       .then((data) => {
         if (data.fixedExpenses) setFixedExpensesList(data.fixedExpenses);
@@ -265,7 +272,7 @@ function App() {
   };
 
   const fetchIncomes = () => {
-    fetchWithAuth(`/api/transactions/incomes?month=${selectedMonth}`)
+    fetchWithAuth(`/api/transactions/incomes?month=${selectedMonthRef.current}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.incomes) setIncomesList(data.incomes);
@@ -351,9 +358,7 @@ function App() {
     fetchCards();
 
     // Attach token to URL so the backend middleware can read it
-    const eventSource = new EventSource(`${apiUrl}/api/stream?token=${token}`, {
-      withCredentials: true,
-    });
+    const eventSource = new EventSource(`${apiUrl}/api/stream?token=${token}`);
 
     const updateAll = () => {
       fetchTransactions();
