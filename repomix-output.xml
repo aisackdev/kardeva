@@ -3710,21 +3710,18 @@ app.use("/api/cards", verifyToken, cardRoutes);
 
 // SSE Stream
 app.get("/api/stream", verifyToken, (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache, no-transform");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
+  // UPGRADED: writeHead sends the headers instantly, bypassing any proxy delays
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
 
-  // NEW: Double-check CORS specifically for the stream (Cloudflare fallback)
-  const origin = req.headers.origin;
-  if (origin === "https://kardeva.app" || origin === "http://localhost:5173") {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-
+  // The Buffer Buster: Force Cloudflare to flush immediately
   res.write(":" + " ".repeat(2048) + "\n\n");
 
-  // Send an initial handshake event
+  // Initial handshake
   res.write(`data: {"status": "connected"}\n\n`);
 
   addClient(res);
@@ -3744,7 +3741,7 @@ app.listen(PORT, "0.0.0.0", () => {
 </file>
 
 <file path="frontend/src/App.tsx">
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import type { Transaction, ChartData, ThirdParty, Card } from "./types";
 import {
   BarChart,
@@ -3824,6 +3821,11 @@ function App() {
     return localNow.toISOString().substring(0, 7); // Extracts "YYYY-MM"
   };
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonth());
+
+  const selectedMonthRef = useRef(selectedMonth);
+  useEffect(() => {
+    selectedMonthRef.current = selectedMonth;
+  }, [selectedMonth]);
 
   const [cardsList, setCardsList] = useState<Card[]>([]);
   const [isCardModalOpen, setIsCardModalOpen] = useState<boolean>(false);
@@ -3905,7 +3907,7 @@ function App() {
 
   // --- API FETCHING (UPDATED TO USE fetchWithAuth) ---
   const fetchChartData = () => {
-    fetchWithAuth(`/api/transactions/chart?month=${selectedMonth}`)
+    fetchWithAuth(`/api/transactions/chart?month=${selectedMonthRef.current}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.chartData) {
@@ -3933,7 +3935,7 @@ function App() {
   };
 
   const fetchTransactions = () => {
-    fetchWithAuth(`/api/transactions?month=${selectedMonth}`)
+    fetchWithAuth(`/api/transactions?month=${selectedMonthRef.current}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.transactions) setTransactions(data.transactions);
@@ -3941,7 +3943,7 @@ function App() {
   };
 
   const fetchSummary = () => {
-    fetchWithAuth(`/api/transactions/summary?month=${selectedMonth}`)
+    fetchWithAuth(`/api/transactions/summary?month=${selectedMonthRef.current}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.personalExpenses !== undefined) {
@@ -3955,7 +3957,9 @@ function App() {
   };
 
   const fetchFixedExpenses = () => {
-    fetchWithAuth(`/api/transactions/fixed-expenses?month=${selectedMonth}`)
+    fetchWithAuth(
+      `/api/transactions/fixed-expenses?month=${selectedMonthRef.current}`,
+    )
       .then((res) => res.json())
       .then((data) => {
         if (data.fixedExpenses) setFixedExpensesList(data.fixedExpenses);
@@ -4011,7 +4015,7 @@ function App() {
   };
 
   const fetchIncomes = () => {
-    fetchWithAuth(`/api/transactions/incomes?month=${selectedMonth}`)
+    fetchWithAuth(`/api/transactions/incomes?month=${selectedMonthRef.current}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.incomes) setIncomesList(data.incomes);
@@ -4097,9 +4101,7 @@ function App() {
     fetchCards();
 
     // Attach token to URL so the backend middleware can read it
-    const eventSource = new EventSource(`${apiUrl}/api/stream?token=${token}`, {
-      withCredentials: true,
-    });
+    const eventSource = new EventSource(`${apiUrl}/api/stream?token=${token}`);
 
     const updateAll = () => {
       fetchTransactions();

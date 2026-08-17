@@ -48,6 +48,10 @@ services:
       - DB_NAME=${DB_NAME:-kardeva_db}
       - DB_HOST=postgres-db
       - DB_PORT=5432
+      - ADMIN_USER=${ADMIN_USER:-Admin}
+      - ADMIN_PASS=${ADMIN_PASS:-KatheKA0096@.}
+      - JWT_SECRET=${JWT_SECRET:-DevSecret123}
+      - BOT_API_KEY=${BOT_API_KEY:-DevBotKey123}
 
 volumes:
   postgres_data:
