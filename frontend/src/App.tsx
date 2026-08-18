@@ -742,7 +742,7 @@ function App() {
                 Total Incomes
               </span>
               <span className="text-[10px] text-green-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                Edit ⚙️
+                Manage ⚙️
               </span>
             </div>
             <span className="text-xl font-extrabold text-green-600 dark:text-green-400">
@@ -780,10 +780,10 @@ function App() {
 
           <div
             onClick={() => setIsModalOpen(true)}
-            className="bg-orange-50 dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-gray-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
+            className="bg-orange-50 dark:bg-orange-950/30 p-5 rounded-xl shadow-sm border border-orange-100 dark:border-orange-800 flex flex-col cursor-pointer hover:ring-2 hover:ring-orange-400 transition-all group"
           >
             <div className="flex justify-between items-center mb-1">
-              <span className="text-orange-700 dark:text-gray-400 text-xs font-semibold">
+              <span className="text-gray-500 dark:text-gray-400 text-xs font-semibold">
                 Lent to Others
               </span>
               <span className="text-[10px] text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">
