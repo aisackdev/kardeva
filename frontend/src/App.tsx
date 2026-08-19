@@ -608,18 +608,28 @@ function App() {
             </button>
 
             {/* Custom Native Month Picker with Google Icon */}
-            <div className="relative flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-colors cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/80">
+            <div
+              className="relative flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 transition-all cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-indigo-400 dark:hover:border-indigo-500 active:scale-95"
+              onClick={(e) => {
+                try {
+                  const input = e.currentTarget.querySelector("input");
+                  if (input) {
+                    input.showPicker();
+                  }
+                } catch (err) {}
+              }}
+            >
               <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 mr-2 text-[20px] pointer-events-none">
                 calendar_month
               </span>
+
               <input
                 type="month"
                 value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                onClick={(e) => {
-                  try {
-                    (e.target as HTMLInputElement).showPicker();
-                  } catch (err) {}
+                onChange={(e) => {
+                  setSelectedMonth(e.target.value);
+
+                  e.target.blur();
                 }}
                 className="bg-transparent text-gray-700 dark:text-gray-200 font-bold outline-none cursor-pointer w-full appearance-none [&::-webkit-calendar-picker-indicator]:hidden"
               />
