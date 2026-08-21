@@ -53,6 +53,14 @@ export const initDB = async () => {
     ADD COLUMN IF NOT EXISTS card_id UUID REFERENCES cards(id) ON DELETE SET NULL;
   `;
 
+  const updateCardsTableQuery = `
+    ALTER TABLE cards 
+    ADD COLUMN IF NOT EXISTS network VARCHAR(50) DEFAULT 'VISA';
+    
+    ALTER TABLE cards 
+    ALTER COLUMN cutoff_day DROP NOT NULL;
+  `;
+
   const backfillBillingMonthQuery = `
     UPDATE transactions 
     SET billing_month = TO_CHAR(date, 'YYYY-MM') 
@@ -64,6 +72,7 @@ export const initDB = async () => {
     await pool.query(createTransactionsTableQuery);
     await pool.query(createCardsTableQuery);
     await pool.query(addColumnsQuery);
+    await pool.query(updateCardsTableQuery);
     await pool.query(backfillBillingMonthQuery);
     console.log("✅ Database tables and migrations applied successfully.");
   } catch (error) {

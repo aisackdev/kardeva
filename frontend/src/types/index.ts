@@ -33,5 +33,6 @@ export interface Card {
   name: string;
   last_four: string;
   type: string;
-  cutoff_day: number;
+  cutoff_day: number | null;
+  network: string;
 }

@@ -14,18 +14,23 @@ export const getCards = async (req: Request, res: Response) => {
 
 export const createCard = async (req: Request, res: Response) => {
   try {
-    const { name, last_four, type, cutoff_day } = req.body;
+    // 1. Receive the new network field
+    const { name, last_four, type, cutoff_day, network } = req.body;
+
+    // Ensure cutoff_day is null for DEBIT
+    const finalCutoffDay = type === "DEBIT" ? null : cutoff_day;
 
     // 1. Create the new card
     const insertQuery = `
-      INSERT INTO cards (name, last_four, type, cutoff_day) 
-      VALUES ($1, $2, $3, $4) RETURNING *;
+      INSERT INTO cards (name, last_four, type, cutoff_day, network) 
+      VALUES ($1, $2, $3, $4, $5) RETURNING *;
     `;
     const result = await pool.query(insertQuery, [
       name,
       last_four,
       type,
       cutoff_day,
+      network || "VISA",
     ]);
     const newCard = result.rows[0];
 
@@ -36,14 +41,14 @@ export const createCard = async (req: Request, res: Response) => {
       SET 
         card_id = $1,
         billing_month = TO_CHAR(
-          date + (CASE WHEN EXTRACT(DAY FROM date) > $2 THEN '1 month'::interval ELSE '0 month'::interval END), 
+          date + (CASE WHEN $2::integer IS NOT NULL AND EXTRACT(DAY FROM date) > $2::integer THEN '1 month'::interval ELSE '0 month'::interval END), 
           'YYYY-MM'
         )
       WHERE card_type LIKE '%' || $3
       AND card_id IS NULL;
     `;
 
-    await pool.query(syncQuery, [newCard.id, cutoff_day, last_four]);
+    await pool.query(syncQuery, [newCard.id, finalCutoffDay, last_four]);
 
     // 3. Shout through the radio that things changed so React reloads the math!
     broadcast("transaction_updated", {});
@@ -91,20 +96,23 @@ export const deleteCard = async (req: Request, res: Response) => {
 export const updateCard = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, last_four, type, cutoff_day } = req.body;
+    const { name, last_four, type, cutoff_day, network } = req.body;
+
+    const finalCutoffDay = type === "DEBIT" ? null : cutoff_day;
 
     // 1. Update the card details in the database
     const updateQuery = `
       UPDATE cards 
-      SET name = $1, last_four = $2, type = $3, cutoff_day = $4 
-      WHERE id = $5 
+      SET name = $1, last_four = $2, type = $3, cutoff_day = $4, network = $5
+      WHERE id = $6
       RETURNING *;
     `;
     const result = await pool.query(updateQuery, [
       name,
       last_four,
       type,
-      cutoff_day,
+      finalCutoffDay,
+      network || "VISA",
       id,
     ]);
 
@@ -137,12 +145,12 @@ export const updateCard = async (req: Request, res: Response) => {
       UPDATE transactions 
       SET 
         billing_month = TO_CHAR(
-          date + (CASE WHEN EXTRACT(DAY FROM date) > $1 THEN '1 month'::interval ELSE '0 month'::interval END), 
+          date + (CASE WHEN $1::integer IS NOT NULL AND EXTRACT(DAY FROM date) > $1::integer THEN '1 month'::interval ELSE '0 month'::interval END), 
           'YYYY-MM'
         )
       WHERE card_id = $2;
     `;
-    await pool.query(syncQuery, [cutoff_day, id]);
+    await pool.query(syncQuery, [finalCutoffDay, id]);
 
     // 3. Tell React to refresh the UI because the math might have changed heavily!
     broadcast("transaction_updated", {});

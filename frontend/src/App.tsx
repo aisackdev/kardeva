@@ -90,6 +90,7 @@ function App() {
   const [cardLastFour, setCardLastFour] = useState<string>("");
   const [cardType, setCardType] = useState<"CREDIT" | "DEBIT">("CREDIT");
   const [cardCutoff, setCardCutoff] = useState<string>("");
+  const [cardNetwork, setCardNetwork] = useState<string>("VISA");
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
 
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -288,17 +289,27 @@ function App() {
   };
 
   const handleSaveCard = () => {
-    if (!cardName.trim() || !cardLastFour.trim() || !cardCutoff) return;
+    if (!cardName.trim() || !cardLastFour.trim() || !cardNetwork) return;
+
+    // If credit, it MUST have a cutoff day.
+    const finalCutoff = cardType === "DEBIT" ? null : Number(cardCutoff);
+    if (cardType === "CREDIT" && !finalCutoff) {
+      alert("Credit cards must have a cutoff day.");
+      return;
+    }
+
+    const payload = {
+      name: cardName,
+      last_four: cardLastFour,
+      type: cardType,
+      cutoff_day: finalCutoff,
+      network: cardNetwork, // <-- Send network
+    };
 
     if (editingCardId) {
       fetchWithAuth(`/api/cards/${editingCardId}`, {
         method: "PUT",
-        body: JSON.stringify({
-          name: cardName,
-          last_four: cardLastFour,
-          type: cardType,
-          cutoff_day: Number(cardCutoff),
-        }),
+        body: JSON.stringify(payload),
       })
         .then((res) => res.json())
         .then((data) => {
@@ -308,12 +319,7 @@ function App() {
     } else {
       fetchWithAuth(`/api/cards`, {
         method: "POST",
-        body: JSON.stringify({
-          name: cardName,
-          last_four: cardLastFour,
-          type: cardType,
-          cutoff_day: Number(cardCutoff),
-        }),
+        body: JSON.stringify(payload),
       })
         .then((res) => res.json())
         .then((data) => {
@@ -328,6 +334,7 @@ function App() {
     setCardLastFour("");
     setCardType("CREDIT");
     setCardCutoff("");
+    setCardNetwork("VISA"); // <-- Reset
     setEditingCardId(null);
     fetchCards();
   };
@@ -1377,35 +1384,59 @@ function App() {
                   onChange={(e) => setCardName(e.target.value)}
                   className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/2 outline-none focus:border-indigo-500"
                 />
+
+                {/* NEW: Network Selector */}
+                <select
+                  value={cardNetwork}
+                  onChange={(e) => setCardNetwork(e.target.value)}
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/4 outline-none focus:border-indigo-500"
+                >
+                  <option value="VISA">VISA</option>
+                  <option value="MASTERCARD">Mastercard</option>
+                  <option value="AMEX">Amex</option>
+                  <option value="DISCOVER">Discover</option>
+                </select>
+
                 <input
                   type="text"
                   placeholder="Last 4 (e.g. 1234)"
                   maxLength={4}
                   value={cardLastFour}
                   onChange={(e) => setCardLastFour(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/4 outline-none focus:border-indigo-500"
+                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/4 outline-none focus:border-indigo-500 font-mono"
                 />
               </div>
+
               <div className="flex gap-2">
                 <select
                   value={cardType}
-                  onChange={(e) =>
-                    setCardType(e.target.value as "CREDIT" | "DEBIT")
-                  }
+                  onChange={(e) => {
+                    setCardType(e.target.value as "CREDIT" | "DEBIT");
+                    if (e.target.value === "DEBIT") setCardCutoff("");
+                  }}
                   className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/3 outline-none focus:border-indigo-500"
                 >
                   <option value="CREDIT">Credit</option>
                   <option value="DEBIT">Debit</option>
                 </select>
-                <input
-                  type="number"
-                  placeholder="Cutoff Day (1-31)"
-                  min="1"
-                  max="31"
+
+                {/* UPGRADED: Cutoff Day uses a clean 1-31 dropdown, disabled if DEBIT */}
+                <select
                   value={cardCutoff}
                   onChange={(e) => setCardCutoff(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-1/3 outline-none focus:border-indigo-500"
-                />
+                  disabled={cardType === "DEBIT"}
+                  className={`border rounded-lg px-3 py-2 text-sm w-1/3 outline-none focus:border-indigo-500 ${cardType === "DEBIT" ? "bg-gray-100 dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-400 cursor-not-allowed" : "border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white"}`}
+                >
+                  <option value="" disabled>
+                    {cardType === "DEBIT" ? "No Cutoff" : "Cutoff Day"}
+                  </option>
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
+                    <option key={day} value={day}>
+                      Day {day}
+                    </option>
+                  ))}
+                </select>
+
                 <button
                   onClick={handleSaveCard}
                   className="w-1/3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded-lg text-sm transition-colors"
@@ -1436,10 +1467,16 @@ function App() {
                         >
                           {card.type}
                         </span>
+                        {/* NEW: Network Badge */}
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
+                          {card.network}
+                        </span>
                       </div>
                       <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
-                        **** **** **** {card.last_four} • Cutoff: Day{" "}
-                        {card.cutoff_day}
+                        **** {card.last_four}{" "}
+                        {card.cutoff_day
+                          ? `• Cutoff: Day ${card.cutoff_day}`
+                          : "• Immediate"}
                       </span>
                     </div>
                     <div className="flex gap-2">
@@ -1449,7 +1486,10 @@ function App() {
                           setCardName(card.name);
                           setCardLastFour(card.last_four);
                           setCardType(card.type as "CREDIT" | "DEBIT");
-                          setCardCutoff(card.cutoff_day.toString());
+                          setCardCutoff(
+                            card.cutoff_day ? card.cutoff_day.toString() : "",
+                          );
+                          setCardNetwork(card.network);
                         }}
                         className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 font-semibold"
                       >
