@@ -16,6 +16,7 @@ export interface Transaction {
   third_party_name?: string;
   type: string;
   is_base: boolean;
+  is_split: boolean;
 }
 
 export interface ChartData {

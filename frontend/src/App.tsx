@@ -39,6 +39,8 @@ function App() {
     "PERSONAL" | "FIXED" | "THIRD_PARTY"
   >("PERSONAL");
   const [editTxPersonId, setEditTxPersonId] = useState<string>("");
+  const [isSplitAction, setIsSplitAction] = useState<boolean>(false);
+  const [splitAmount, setSplitAmount] = useState<string>("");
 
   const [incomeSource, setIncomeSource] = useState<string>("");
   const [incomeAmount, setIncomeAmount] = useState<string>("");
@@ -439,6 +441,14 @@ function App() {
       return;
     }
 
+    if (isSplitAction) {
+      const splitNum = Number(splitAmount);
+      if (splitNum <= 0 || splitNum >= Number(selectedTx.amount)) {
+        alert("The split amount must be valid and less than the total.");
+        return;
+      }
+    }
+
     fetchWithAuth(`/api/transactions/${selectedTx.id}/edit`, {
       method: "PATCH",
       body: JSON.stringify({
@@ -447,6 +457,9 @@ function App() {
         is_third_party: editTxCategory === "THIRD_PARTY",
         third_party_id:
           editTxCategory === "THIRD_PARTY" ? editTxPersonId : null,
+        // Send our new split instructions
+        is_split_action: isSplitAction,
+        split_amount: splitAmount,
       }),
     }).then(() => {
       setEditModalOpen(false);
@@ -854,6 +867,15 @@ function App() {
                       <span className="font-bold text-gray-800 dark:text-gray-200">
                         {tx.merchant}
                       </span>
+                      {/* NEW: Split Badge */}
+                      {tx.is_split && (
+                        <span className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1 border border-gray-200 dark:border-gray-700">
+                          <span className="material-symbols-outlined !text-[12px]">
+                            content_cut
+                          </span>{" "}
+                          Split
+                        </span>
+                      )}
                     </div>
                     <span className="text-xs text-gray-400 mt-1">
                       {formatDate(tx.date)} • {cleanLocation(tx.location)} •{" "}
@@ -870,6 +892,8 @@ function App() {
                       onClick={() => {
                         setSelectedTx(tx);
                         setEditTxMerchant(tx.merchant);
+                        setIsSplitAction(false);
+                        setSplitAmount("");
                         if (tx.is_third_party) {
                           setEditTxCategory("THIRD_PARTY");
                           setEditTxPersonId(tx.third_party_id || "");

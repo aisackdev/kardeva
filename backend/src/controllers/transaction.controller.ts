@@ -213,15 +213,83 @@ export const getChartData = async (req: Request, res: Response) => {
 export const updateRecentTransaction = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { merchant, is_base, is_third_party, third_party_id } = req.body;
+    const {
+      merchant,
+      is_base,
+      is_third_party,
+      third_party_id,
+      is_split_action,
+      split_amount,
+    } = req.body;
 
+    // --- THE SPLIT LOGIC ---
+    if (is_split_action && split_amount) {
+      // 1. Find the original transaction
+      const origResult = await pool.query(
+        "SELECT * FROM transactions WHERE id = $1",
+        [id],
+      );
+      if (origResult.rows.length === 0)
+        return res.status(404).json({ error: "Transaction not found" });
+
+      const originalTx = origResult.rows[0];
+      const originalAmount = parseFloat(originalTx.amount);
+      const thirdPartyAmount = parseFloat(split_amount);
+      const personalAmount = originalAmount - thirdPartyAmount;
+
+      if (thirdPartyAmount <= 0 || thirdPartyAmount >= originalAmount) {
+        return res.status(400).json({ error: "Invalid split amount" });
+      }
+
+      // 2. Update the original row to be the "Personal" portion
+      const updateOrigQuery = `
+        UPDATE transactions 
+        SET merchant = $1, amount = $2, is_third_party = false, third_party_id = null, is_split = true, auth_code = $3 
+        WHERE id = $4 RETURNING *;
+      `;
+      const personalAuthCode = originalTx.auth_code + "-P"; // P for Personal
+      await pool.query(updateOrigQuery, [
+        merchant,
+        personalAmount,
+        personalAuthCode,
+        id,
+      ]);
+
+      // 3. Insert a NEW cloned row for the "Third Party" portion
+      const insertSplitQuery = `
+        INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, is_third_party, third_party_id, type, is_base, billing_month, card_id, is_split)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)
+      `;
+      const thirdPartyAuthCode = originalTx.auth_code + "-S"; // S for Shared/Split
+      await pool.query(insertSplitQuery, [
+        merchant,
+        originalTx.location,
+        originalTx.date,
+        originalTx.card_type,
+        thirdPartyAuthCode,
+        thirdPartyAmount,
+        true,
+        third_party_id,
+        originalTx.type,
+        originalTx.is_base,
+        originalTx.billing_month,
+        originalTx.card_id,
+      ]);
+
+      // Tell the UI to refresh
+      broadcast("transaction_updated", {});
+      return res
+        .status(200)
+        .json({ message: "Transaction split successfully" });
+    }
+
+    // --- NORMAL UPDATE LOGIC (If not splitting) ---
     const updateQuery = `
       UPDATE transactions 
       SET merchant = $1, is_base = $2, is_third_party = $3, third_party_id = $4 
       WHERE id = $5 
       RETURNING *;
     `;
-
     const result = await pool.query(updateQuery, [
       merchant,
       is_base,
@@ -230,20 +298,13 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
       id,
     ]);
 
-    if (result.rows.length === 0) {
-      res.status(404).json({ error: "Transaction not found" });
-      return;
-    }
+    if (result.rows.length === 0)
+      return res.status(404).json({ error: "Transaction not found" });
 
-    const updatedTransaction = result.rows[0];
-
-    // Tell all connected browsers that a transaction changed!
-    broadcast("transaction_updated", updatedTransaction);
-
-    res.status(200).json({
-      message: "Transaction updated successfully",
-      transaction: updatedTransaction,
-    });
+    broadcast("transaction_updated", result.rows[0]);
+    res
+      .status(200)
+      .json({ message: "Transaction updated", transaction: result.rows[0] });
   } catch (error) {
     console.error("Error updating transaction:", error);
     res.status(500).json({ error: "Internal Server Error" });
