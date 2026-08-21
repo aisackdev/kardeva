@@ -595,18 +595,8 @@ function App() {
               Financial Dashboard
             </p>
           </div>
-
+          {/* Cards, Month Picker, Dark/Light Mode Switcher and Logout */}
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsCardModalOpen(true)}
-              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300"
-              title="Manage Cards"
-            >
-              <span className="material-symbols-outlined text-2xl">
-                credit_card
-              </span>
-            </button>
-
             {/* Custom Native Month Picker with Google Icon */}
             <div
               className="relative flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 transition-all cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-indigo-400 dark:hover:border-indigo-500 active:scale-95"
@@ -635,9 +625,21 @@ function App() {
               />
             </div>
 
+            {/* Credit Card manager */}
+            <button
+              onClick={() => setIsCardModalOpen(true)}
+              className="p-2 rounded-full hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300"
+              title="Manage Cards"
+            >
+              <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-3xl">
+                credit_card
+              </span>
+            </button>
+
+            {/* Dark/Light Mode Switcher */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors flex items-center justify-center"
+              className="p-2 rounded-full hover:bg-indigo-50 dark:hover:bg-yellow-900/30 transition-colors flex items-center justify-center"
               title="Toggle Dark Mode"
             >
               {isDarkMode ? (
@@ -645,13 +647,13 @@ function App() {
                   light_mode
                 </span>
               ) : (
-                <span className="material-symbols-outlined text-indigo-900 text-3xl">
+                <span className="material-symbols-outlined text-indigo-600 text-3xl">
                   dark_mode
                 </span>
               )}
             </button>
 
-            {/* NEW: Logout Button */}
+            {/* Logout Button */}
             <button
               onClick={handleLogout}
               className="p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 transition-colors flex items-center justify-center"
