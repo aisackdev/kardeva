@@ -1103,6 +1103,7 @@ function App() {
                 </div>
               </div>
               {/* Conditional Select for Third Parties */}
+              {/* Conditional Select for Third Parties */}
               {editTxCategory === "THIRD_PARTY" && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                   <label className="text-xs font-semibold text-orange-600 dark:text-orange-400 mb-1 block">
@@ -1126,6 +1127,53 @@ function App() {
                       </option>
                     ))}
                   </select>
+
+                  {/* NEW: The Scissors Tool (Only show if this transaction hasn't been split before) */}
+                  {!selectedTx?.is_split && (
+                    <div className="mt-4 p-3 bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/50 rounded-lg">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isSplitAction}
+                          onChange={(e) => setIsSplitAction(e.target.checked)}
+                          className="w-4 h-4 text-orange-600"
+                        />
+                        <span className="text-sm font-bold text-orange-700 dark:text-orange-500 flex items-center gap-1">
+                          <span className="material-symbols-outlined !text-[16px]">
+                            content_cut
+                          </span>
+                          Split expense with me
+                        </span>
+                      </label>
+
+                      {isSplitAction && (
+                        <div className="mt-3 ml-6 animate-in fade-in">
+                          <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 block">
+                            How much does they owe you? (Max: ₡
+                            {formatCurrency(Number(selectedTx.amount))})
+                          </label>
+                          <input
+                            type="number"
+                            value={splitAmount}
+                            onChange={(e) => setSplitAmount(e.target.value)}
+                            placeholder="e.g. 3000"
+                            className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-orange-500 mb-2"
+                          />
+                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                            Your personal expense will be:{" "}
+                            <span className="font-bold text-red-500 dark:text-red-400">
+                              ₡
+                              {formatCurrency(
+                                Number(selectedTx.amount) -
+                                  Number(splitAmount || 0),
+                              )}
+                            </span>
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {thirdParties.length === 0 && (
                     <p className="text-xs text-red-500 mt-1">
                       Please add people in "Manage People" first.
