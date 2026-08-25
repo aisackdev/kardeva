@@ -1194,7 +1194,7 @@ function App() {
 
       {/* Incomes Modal */}
       {isIncomeModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
+        <div className="fixed inset-0snacksIAWelcg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
             <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
               <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
