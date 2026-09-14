@@ -726,8 +726,8 @@ function App() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6 flex flex-col items-center relative transition-colors duration-300">
       <div className="w-full max-w-4xl">
         {/* Header Section */}
-        <header className="bg-white dark:bg-gray-900 p-6 rounded-xl shadow-sm mb-6 flex flex-col md:flex-row justify-between items-center border border-gray-100 dark:border-gray-800 transition-colors duration-300 gap-4">
-          <div>
+        <header className="bg-white dark:bg-gray-900 p-5 sm:p-6 rounded-xl shadow-sm mb-6 flex flex-col sm:flex-row justify-between items-center border border-gray-100 dark:border-gray-800 transition-colors duration-300 gap-4">
+          <div className="text-center sm:text-left w-full sm:w-auto">
             <h1 className="text-3xl font-extrabold text-gray-800 dark:text-white">
               Kardeva
             </h1>
@@ -735,8 +735,9 @@ function App() {
               Financial Dashboard
             </p>
           </div>
+
           {/* Cards, Month Picker, Dark/Light Mode Switcher and Logout */}
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 sm:gap-4 w-full sm:w-auto">
             {/* Custom Native Month Picker with Google Icon */}
             <div
               className="relative flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 transition-all cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-indigo-400 dark:hover:border-indigo-500 active:scale-95"
@@ -758,7 +759,6 @@ function App() {
                 value={selectedMonth}
                 onChange={(e) => {
                   setSelectedMonth(e.target.value);
-
                   e.target.blur();
                 }}
                 className="bg-transparent text-gray-700 dark:text-gray-200 font-bold outline-none cursor-pointer w-full appearance-none [&::-webkit-calendar-picker-indicator]:hidden"
@@ -897,7 +897,7 @@ function App() {
                 Manage ⚙️
               </span>
             </div>
-            <span className="text-xl font-extrabold text-green-600 dark:text-green-400">
+            <span className="text-xl font-extrabold text-green-600 dark:text-green-400 whitespace-nowrap">
               + ₡{formatCurrency(baseIncome + extraIncome)}
             </span>
             <span className="text-[10px] text-gray-500 mt-1">
@@ -921,7 +921,7 @@ function App() {
                 Manage ⚙️
               </span>
             </div>
-            <span className="text-xl font-extrabold text-red-600 dark:text-red-400">
+            <span className="text-xl font-extrabold text-red-600 dark:text-red-400 whitespace-nowrap">
               - ₡{formatCurrency(personalExpenses + fixedExpenses)}
             </span>
             <span className="text-[10px] text-gray-500 mt-1">
@@ -942,7 +942,7 @@ function App() {
                 Manage ⚙️
               </span>
             </div>
-            <span className="text-xl font-extrabold text-orange-600 dark:text-orange-400">
+            <span className="text-xl font-extrabold text-orange-600 dark:text-orange-400 whitespace-nowrap">
               - ₡{formatCurrency(thirdPartyExpenses)}
             </span>
             <span className="text-[10px] text-gray-500 mt-1">
@@ -954,7 +954,7 @@ function App() {
             <span className="text-gray-400 dark:text-gray-400 text-xs font-semibold mb-1">
               Available Balance
             </span>
-            <span className="text-xl font-extrabold text-white dark:text-white">
+            <span className="text-xl font-extrabold text-white dark:text-white whitespace-nowrap">
               = ₡{formatCurrency(availableBalance)}
             </span>
           </div>
@@ -1004,7 +1004,7 @@ function App() {
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <span
-                      className={`font-bold ${tx.is_third_party ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"}`}
+                      className={`font-bold whitespace-nowrap ${tx.is_third_party ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"}`}
                     >
                       - ₡{formatCurrency(Number(tx.amount))}
                     </span>
