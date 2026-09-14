@@ -1,5 +1,11 @@
 import { useEffect, useState, useRef } from "react";
-import type { Transaction, ChartData, ThirdParty, Card } from "./types";
+import type {
+  Transaction,
+  ChartData,
+  ThirdParty,
+  Card,
+  ConfirmConfig,
+} from "./types";
 import {
   BarChart,
   Bar,
@@ -163,6 +169,36 @@ function App() {
       throw new Error("Unauthorized");
     }
     return response;
+  };
+
+  // --- NEW: GLOBAL CONFIRMATION MODAL STATE ---
+
+  const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig>({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    onConfirm: () => {},
+  });
+
+  // Helper function to trigger the modal easily
+  const requestConfirm = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    confirmText = "Delete",
+  ) => {
+    setConfirmConfig({
+      isOpen: true,
+      title,
+      message,
+      confirmText,
+      onConfirm,
+    });
+  };
+
+  const closeConfirm = () => {
+    setConfirmConfig((prev) => ({ ...prev, isOpen: false }));
   };
 
   // --- API FETCHING (UPDATED TO USE fetchWithAuth) ---
@@ -342,9 +378,21 @@ function App() {
   };
 
   const handleDeleteCard = (id: string) => {
-    if (!confirm("Delete this card?")) return;
-    fetchWithAuth(`/api/cards/${id}`, { method: "DELETE" }).then(() =>
-      fetchCards(),
+    requestConfirm(
+      "Delete Card",
+      "Are you sure you want to delete this card?",
+      () => {
+        fetchWithAuth(`/api/cards/${id}`, { method: "DELETE" })
+          .then(() => {
+            fetchCards();
+            closeConfirm();
+          })
+          .catch((error) => {
+            console.error("Error deleting person:", error);
+            alert("Failed to delete person.");
+            closeConfirm();
+          });
+      },
     );
   };
 
@@ -421,17 +469,27 @@ function App() {
   };
 
   const handleDeletePerson = (id: string) => {
-    if (
-      !confirm(
-        "Are you sure? Their transactions will become personal expenses.",
-      )
-    )
-      return;
-    fetchWithAuth(`/api/third-parties/${id}`, { method: "DELETE" }).then(() => {
-      fetchThirdParties();
-      fetchTransactions();
-      fetchSummary();
-    });
+    const person = thirdParties.find((p) => p.id === id);
+    const personName = person?.name || "this person";
+
+    requestConfirm(
+      "Delete Person",
+      `Are you sure you want to delete "${personName}"? All their associated transactions will become personal expenses.`,
+      () => {
+        fetchWithAuth(`/api/third-parties/${id}`, { method: "DELETE" })
+          .then(() => {
+            fetchThirdParties();
+            fetchTransactions();
+            fetchSummary();
+            closeConfirm();
+          })
+          .catch((error) => {
+            console.error("Error deleting person:", error);
+            alert("Failed to delete person.");
+            closeConfirm();
+          });
+      },
+    );
   };
 
   const handleSaveRecentTx = () => {
@@ -465,6 +523,30 @@ function App() {
       setEditModalOpen(false);
       setSelectedTx(null);
     });
+  };
+
+  const handleDeleteRecentTx = () => {
+    if (!selectedTx) return;
+
+    requestConfirm(
+      "Delete Transaction",
+      `Are you sure you want to delete "${selectedTx.merchant}"? This action cannot be undone.`,
+      () => {
+        fetchWithAuth(`/api/transactions/${selectedTx.id}`, {
+          method: "DELETE",
+        })
+          .then(() => {
+            setEditModalOpen(false);
+            setSelectedTx(null);
+            closeConfirm();
+          })
+          .catch((error) => {
+            console.error("Error deleting transaction:", error);
+            alert("Failed to delete transaction.");
+            closeConfirm();
+          });
+      },
+    );
   };
 
   const handleSaveIncome = () => {
@@ -509,9 +591,47 @@ function App() {
   };
 
   const handleDeleteIncome = (id: string) => {
-    if (!confirm("Delete this income?")) return;
-    fetchWithAuth(`/api/transactions/${id}`, { method: "DELETE" }).then(() =>
-      fetchIncomes(),
+    const incomeList = incomesList.find((e) => e.id === id);
+    const currentExpense = incomeList?.merchant || "this income";
+
+    requestConfirm(
+      "Delete Fixed Income",
+      `Are you sure you want to delete "${currentExpense}"?`,
+      () => {
+        fetchWithAuth(`/api/transactions/${id}`, { method: "DELETE" })
+          .then(() => {
+            fetchIncomes();
+            closeConfirm();
+          })
+          .catch((error) => {
+            console.error("Error deleting income:", error);
+            alert("Failed to delete income.");
+            closeConfirm();
+          });
+      },
+    );
+  };
+
+  const handleDeleteFixedExpense = (id: string) => {
+    const expense = fixedExpensesList.find((f) => f.id === id);
+    const expenseName = expense?.merchant || "this fixed expense";
+
+    requestConfirm(
+      "Delete Fixed Expense",
+      `Are you sure you want to delete "${expenseName}"?`,
+      () => {
+        fetchWithAuth(`/api/transactions/${id}`, { method: "DELETE" })
+          .then(() => {
+            fetchFixedExpenses();
+            fetchSummary();
+            closeConfirm();
+          })
+          .catch((error) => {
+            console.error("Error deleting fixed expense:", error);
+            alert("Failed to delete fixed expense.");
+            closeConfirm();
+          });
+      },
     );
   };
 
@@ -931,8 +1051,8 @@ function App() {
 
       {/* Third Parties Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-fade-in">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300 animate-scale-up">
             <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
               <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
                 <span className="material-symbols-outlined">group</span> Manage
@@ -1034,8 +1154,8 @@ function App() {
 
       {/* Edit Recent Transaction Modal */}
       {editModalOpen && selectedTx && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-fade-in">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col border border-gray-200 dark:border-gray-800 transition-colors duration-300 animate-scale-up">
             <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-950">
               <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
                 Edit Transaction
@@ -1102,7 +1222,7 @@ function App() {
                   </label>
                 </div>
               </div>
-              {/* Conditional Select for Third Parties */}
+
               {/* Conditional Select for Third Parties */}
               {editTxCategory === "THIRD_PARTY" && (
                 <div className="animate-in fade-in slide-in-from-top-2 duration-200">
@@ -1181,12 +1301,23 @@ function App() {
                   )}
                 </div>
               )}
-              <button
-                onClick={handleSaveRecentTx}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg mt-2 transition-colors shadow-md"
-              >
-                Save Changes
-              </button>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 mt-4">
+                <button
+                  onClick={handleDeleteRecentTx}
+                  className="w-1/3 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/30 dark:hover:bg-red-900/50 dark:text-red-400 font-bold py-3 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-1"
+                  title="Delete Transaction"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={handleSaveRecentTx}
+                  className="w-2/3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors shadow-md"
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1194,8 +1325,8 @@ function App() {
 
       {/* Incomes Modal */}
       {isIncomeModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-fade-in">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300 animate-scale-up">
             <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
               <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
                 <span className="material-symbols-outlined">payments</span>{" "}
@@ -1314,8 +1445,8 @@ function App() {
 
       {/* Fixed Expenses Modal */}
       {isFixedModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-fade-in">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300 animate-scale-up">
             <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
               <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
                 <span className="material-symbols-outlined">receipt_long</span>{" "}
@@ -1404,13 +1535,7 @@ function App() {
                         </span>
                       </button>
                       <button
-                        onClick={() => {
-                          if (confirm("Delete this fixed expense?")) {
-                            fetchWithAuth(`/api/transactions/${exp.id}`, {
-                              method: "DELETE",
-                            }).then(() => fetchFixedExpenses());
-                          }
-                        }}
+                        onClick={() => handleDeleteFixedExpense(exp.id)}
                         className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
                       >
                         <span className="material-symbols-outlined !text-[14px]">
@@ -1428,8 +1553,8 @@ function App() {
 
       {/* --- NEW MODAL: MANAGE CARDS --- */}
       {isCardModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-fade-in">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300 animate-scale-up">
             <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
               <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
                 <span className="material-symbols-outlined">credit_card</span>{" "}
@@ -1586,6 +1711,41 @@ function App() {
                   </p>
                 )}
               </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- GLOBAL CONFIRMATION MODAL --- */}
+      {confirmConfig.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-[100] p-4 animate-fade-in">
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col border border-gray-200 dark:border-gray-800 animate-scale-up">
+            <div className="p-5 flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
+                <span className="material-symbols-outlined text-red-600 dark:text-red/-400 text-2xl">
+                  warning
+                </span>
+              </div>
+              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 mb-2">
+                {confirmConfig.title}
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                {confirmConfig.message}
+              </p>
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={closeConfirm}
+                  className="w-1/2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold py-2.5 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmConfig.onConfirm}
+                  className="w-1/2 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-lg transition-colors shadow-md"
+                >
+                  {confirmConfig.confirmText}
+                </button>
+              </div>
             </div>
           </div>
         </div>

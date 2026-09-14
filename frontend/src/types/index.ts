@@ -37,3 +37,11 @@ export interface Card {
   cutoff_day: number | null;
   network: string;
 }
+
+export interface ConfirmConfig {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  confirmText?: string;
+  onConfirm: () => void;
+}
