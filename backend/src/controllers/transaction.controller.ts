@@ -219,6 +219,7 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
     third_party_id,
     is_split_action,
     split_amount,
+    note,
   } = req.body;
 
   // --- THE SPLIT LOGIC ---
@@ -262,21 +263,22 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
       const personalAuthCode = originalTx.auth_code + "-P"; // P for Personal
       const updateOrigQuery = `
         UPDATE transactions 
-        SET merchant = $1, amount = $2, is_third_party = false, third_party_id = null, is_split = true, auth_code = $3 
-        WHERE id = $4 RETURNING *;
+        SET merchant = $1, amount = $2, is_third_party = false, third_party_id = null, is_split = true, auth_code = $3, note = $4
+        WHERE id = $5 RETURNING *;
       `;
       await client.query(updateOrigQuery, [
         merchant,
         personalAmount,
         personalAuthCode,
+        note || null,
         id,
       ]);
 
       // 5. Insert a NEW cloned row for the "Third Party" portion
       const thirdPartyAuthCode = originalTx.auth_code + "-S"; // S for Shared/Split
       const insertSplitQuery = `
-        INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, is_third_party, third_party_id, type, is_base, billing_month, card_id, is_split)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)
+        INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, is_third_party, third_party_id, type, is_base, billing_month, card_id, is_split, note)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true, $13)
       `;
       await client.query(insertSplitQuery, [
         merchant,
@@ -286,11 +288,12 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
         thirdPartyAuthCode,
         thirdPartyAmount,
         true,
-        third_party_id,
+        third_party_id || null,
         originalTx.type,
         originalTx.is_base,
         originalTx.billing_month,
-        originalTx.card_id,
+        originalTx.card_id || null,
+        note || null,
       ]);
 
       // 6. Commit the transaction if everything succeeded
@@ -316,15 +319,16 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
   try {
     const updateQuery = `
       UPDATE transactions 
-      SET merchant = $1, is_base = $2, is_third_party = $3, third_party_id = $4 
-      WHERE id = $5 
+      SET merchant = $1, is_base = $2, is_third_party = $3, third_party_id = $4, note = $5
+      WHERE id = $6
       RETURNING *;
     `;
     const result = await pool.query(updateQuery, [
       merchant,
       is_base,
       is_third_party,
-      third_party_id,
+      third_party_id || null,
+      note || null,
       id,
     ]);
 

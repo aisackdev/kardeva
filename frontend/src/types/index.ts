@@ -17,6 +17,7 @@ export interface Transaction {
   type: string;
   is_base: boolean;
   is_split: boolean;
+  note?: string;
 }
 
 export interface ChartData {

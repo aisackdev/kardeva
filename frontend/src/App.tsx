@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import type {
   Transaction,
   ChartData,
@@ -41,6 +41,9 @@ function App() {
   const [editModalOpen, setEditModalOpen] = useState<boolean>(false);
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [editTxMerchant, setEditTxMerchant] = useState<string>("");
+  const [editTxNote, setEditTxNote] = useState<string>("");
+  const [isEditingMerchant, setIsEditingMerchant] = useState<boolean>(false);
+  const [isEditingNote, setIsEditingNote] = useState<boolean>(false);
   const [editTxCategory, setEditTxCategory] = useState<
     "PERSONAL" | "FIXED" | "THIRD_PARTY"
   >("PERSONAL");
@@ -511,6 +514,7 @@ function App() {
       method: "PATCH",
       body: JSON.stringify({
         merchant: editTxMerchant,
+        note: editTxNote,
         is_base: editTxCategory === "FIXED",
         is_third_party: editTxCategory === "THIRD_PARTY",
         third_party_id:
@@ -656,6 +660,49 @@ function App() {
   const displayedChartData =
     chartRange === "ALL" ? chartData : chartData.slice(-chartRange);
 
+  // --- NEW: MEMOIZED CHART TO PREVENT RE-RENDER LAG ---
+  const chartComponent = useMemo(() => {
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={displayedChartData}>
+          <CartesianGrid
+            strokeDasharray="3 3"
+            vertical={false}
+            stroke={isDarkMode ? "#374151" : "#f3f4f6"}
+          />
+          <XAxis
+            dataKey="day"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: "#9ca3af", fontSize: 12 }}
+            tickFormatter={(val) => val.split("-")[2]}
+          />
+          <YAxis
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: "#9ca3af", fontSize: 12 }}
+            tickFormatter={(value) => `₡${value / 1000}k`}
+          />
+          <Tooltip
+            cursor={{ fill: isDarkMode ? "#1f2937" : "#f3f4f6" }}
+            contentStyle={{
+              backgroundColor: isDarkMode ? "#111827" : "#fff",
+              borderColor: isDarkMode ? "#374151" : "#e5e7eb",
+              color: isDarkMode ? "#fff" : "#000",
+              borderRadius: "8px",
+            }}
+            labelFormatter={(label) => formatDate(label)}
+            formatter={(value: any) => [
+              `₡${formatCurrency(Number(value))}`,
+              "Total",
+            ]}
+          />
+          <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    );
+  }, [displayedChartData, isDarkMode]); // Only re-render if data or theme changes
+
   // --- RENDER 1: LOGIN SCREEN ---
   if (!token) {
     return (
@@ -721,6 +768,128 @@ function App() {
     );
   }
 
+  // --- NEW: TRANSACTION UI HELPERS ---
+
+  const getCategoryEmoji = (merchant: string) => {
+    const m = merchant.toLowerCase();
+    if (
+      m.includes("uber") ||
+      m.includes("didi") ||
+      m.includes("taxi") ||
+      m.includes("peaje")
+    )
+      return "🚗";
+    if (
+      m.includes("mcdonald") ||
+      m.includes("burger") ||
+      m.includes("kfc") ||
+      m.includes("pizza") ||
+      m.includes("restaurante") ||
+      m.includes("soda") ||
+      m.includes("starbucks")
+    )
+      return "🍔";
+    if (
+      m.includes("gas") ||
+      m.includes("delta") ||
+      m.includes("uno") ||
+      m.includes("servicentro") ||
+      m.includes("bomba")
+    )
+      return "⛽";
+    if (
+      m.includes("walmart") ||
+      m.includes("masxmenos") ||
+      m.includes("pali") ||
+      m.includes("automercado") ||
+      m.includes("super") ||
+      m.includes("maxi")
+    )
+      return "🛒";
+    if (
+      m.includes("farmacia") ||
+      m.includes("fischel") ||
+      m.includes("sucre") ||
+      m.includes("hospital") ||
+      m.includes("clinica")
+    )
+      return "💊";
+    if (
+      m.includes("cine") ||
+      m.includes("netflix") ||
+      m.includes("spotify") ||
+      m.includes("hbo") ||
+      m.includes("disney") ||
+      m.includes("apple")
+    )
+      return "🍿";
+    if (
+      m.includes("amazon") ||
+      m.includes("epa") ||
+      m.includes("ferreteria") ||
+      m.includes("tienda")
+    )
+      return "🛍️";
+    if (
+      m.includes("sinpe") ||
+      m.includes("transferencia") ||
+      m.includes("atm") ||
+      m.includes("cajero")
+    )
+      return "🏦";
+    if (
+      m.includes("recarga") ||
+      m.includes("kolbi") ||
+      m.includes("claro") ||
+      m.includes("liberty")
+    )
+      return "📱";
+    return "💳"; // Default fallback
+  };
+
+  const formatDateTime = (dateString: string) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    const dayMonth = date.toLocaleDateString("es-CR", {
+      day: "numeric",
+      month: "short",
+    });
+    const time = date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    return `${dayMonth}, ${time}`;
+  };
+
+  const getCardDetails = (tx: Transaction) => {
+    // Extract last 4 digits from the webhook string (e.g., "VISA *1234")
+    const match = tx.card_type?.match(/\d{4}$/);
+    const lastFour = match ? match[0] : null;
+
+    let type = "Card";
+    let digits = lastFour ? `**** ${lastFour}` : tx.card_type;
+
+    if (lastFour) {
+      // Look up the card in our saved cards list to know if it's Credit or Debit
+      const foundCard = cardsList.find((c) => c.last_four === lastFour);
+      if (foundCard) {
+        type = foundCard.type === "CREDIT" ? "Credit" : "Debit";
+      }
+    } else if (
+      tx.card_type?.toLowerCase().includes("transfer") ||
+      tx.card_type?.toLowerCase().includes("sinpe")
+    ) {
+      type = "Transfer";
+      digits = "";
+    } else if (tx.card_type === "DIRECT") {
+      type = "Cash";
+      digits = "";
+    }
+
+    return digits ? `${type} ∘ ${digits}` : type;
+  };
+
   // --- RENDER 2: MAIN DASHBOARD ---
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-6 flex flex-col items-center relative transition-colors duration-300">
@@ -736,24 +905,21 @@ function App() {
             </p>
           </div>
 
-          {/* Cards, Month Picker, Dark/Light Mode Switcher and Logout */}
-          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 sm:gap-4 w-full sm:w-auto">
-            {/* Custom Native Month Picker with Google Icon */}
+          {/* Controls Container: Column on mobile, Row on desktop */}
+          <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-end gap-4 w-full sm:w-auto">
+            {/* Month Picker */}
             <div
-              className="relative flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-1.5 transition-all cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-indigo-400 dark:hover:border-indigo-500 active:scale-95"
+              className="relative flex items-center justify-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg px-4 py-2 transition-all cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-indigo-400 dark:hover:border-indigo-500 active:scale-95 w-full sm:w-auto"
               onClick={(e) => {
                 try {
                   const input = e.currentTarget.querySelector("input");
-                  if (input) {
-                    input.showPicker();
-                  }
+                  if (input) input.showPicker();
                 } catch (err) {}
               }}
             >
               <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 mr-2 text-[20px] pointer-events-none">
                 calendar_month
               </span>
-
               <input
                 type="month"
                 value={selectedMonth}
@@ -761,46 +927,48 @@ function App() {
                   setSelectedMonth(e.target.value);
                   e.target.blur();
                 }}
-                className="bg-transparent text-gray-700 dark:text-gray-200 font-bold outline-none cursor-pointer w-full appearance-none [&::-webkit-calendar-picker-indicator]:hidden"
+                className="bg-transparent text-gray-700 dark:text-gray-200 font-bold outline-none cursor-pointer appearance-none [&::-webkit-calendar-picker-indicator]:hidden text-center"
               />
             </div>
 
-            {/* Credit Card manager */}
-            <button
-              onClick={() => setIsCardModalOpen(true)}
-              className="p-2 rounded-full hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300"
-              title="Manage Cards"
-            >
-              <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-3xl">
-                credit_card
-              </span>
-            </button>
-
-            {/* Dark/Light Mode Switcher */}
-            <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className="p-2 rounded-full hover:bg-indigo-50 dark:hover:bg-yellow-900/30 transition-colors flex items-center justify-center"
-              title="Toggle Dark Mode"
-            >
-              {isDarkMode ? (
-                <span className="material-symbols-outlined text-yellow-400 text-3xl">
-                  light_mode
+            {/* Action Buttons Group */}
+            <div className="flex items-center justify-center gap-4">
+              <button
+                onClick={() => setIsCardModalOpen(true)}
+                className="p-2 rounded-full hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors flex items-center justify-center text-gray-600 dark:text-gray-300"
+                title="Manage Cards"
+              >
+                <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-3xl">
+                  credit_card
                 </span>
-              ) : (
-                <span className="material-symbols-outlined text-indigo-600 text-3xl">
-                  dark_mode
-                </span>
-              )}
-            </button>
+              </button>
 
-            {/* Logout Button */}
-            <button
-              onClick={handleLogout}
-              className="p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 transition-colors flex items-center justify-center"
-              title="Logout"
-            >
-              <span className="material-symbols-outlined text-2xl">logout</span>
-            </button>
+              <button
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                className="p-2 rounded-full hover:bg-indigo-50 dark:hover:bg-yellow-900/30 transition-colors flex items-center justify-center"
+                title="Toggle Dark Mode"
+              >
+                {isDarkMode ? (
+                  <span className="material-symbols-outlined text-yellow-400 text-3xl">
+                    light_mode
+                  </span>
+                ) : (
+                  <span className="material-symbols-outlined text-indigo-600 text-3xl">
+                    dark_mode
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 transition-colors flex items-center justify-center"
+                title="Logout"
+              >
+                <span className="material-symbols-outlined text-2xl">
+                  logout
+                </span>
+              </button>
+            </div>
           </div>
         </header>
 
@@ -840,43 +1008,8 @@ function App() {
           </div>
 
           <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={displayedChartData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                  stroke={isDarkMode ? "#374151" : "#f3f4f6"}
-                />
-                <XAxis
-                  dataKey="day"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#9ca3af", fontSize: 12 }}
-                  tickFormatter={(val) => val.split("-")[2]}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#9ca3af", fontSize: 12 }}
-                  tickFormatter={(value) => `₡${value / 1000}k`}
-                />
-                <Tooltip
-                  cursor={{ fill: isDarkMode ? "#1f2937" : "#f3f4f6" }}
-                  contentStyle={{
-                    backgroundColor: isDarkMode ? "#111827" : "#fff",
-                    borderColor: isDarkMode ? "#374151" : "#e5e7eb",
-                    color: isDarkMode ? "#fff" : "#000",
-                    borderRadius: "8px",
-                  }}
-                  labelFormatter={(label) => formatDate(label)}
-                  formatter={(value: any) => [
-                    `₡${formatCurrency(Number(value))}`,
-                    "Total",
-                  ]}
-                />
-                <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {/* The Chart */}
+            <div className="h-64 w-full">{chartComponent}</div>
           </div>
         </div>
 
@@ -980,65 +1113,67 @@ function App() {
               transactions.map((tx) => (
                 <li
                   key={tx.id}
-                  className="p-5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors flex justify-between items-center"
+                  onClick={() => {
+                    setSelectedTx(tx);
+                    setEditTxMerchant(tx.merchant);
+                    setEditTxNote(tx.note || "");
+                    setIsEditingMerchant(false);
+                    setIsEditingNote(false);
+                    setIsSplitAction(false);
+                    setSplitAmount("");
+                    if (tx.is_third_party) {
+                      setEditTxCategory("THIRD_PARTY");
+                      setEditTxPersonId(tx.third_party_id || "");
+                    } else if (tx.is_base) {
+                      setEditTxCategory("FIXED");
+                      setEditTxPersonId("");
+                    } else {
+                      setEditTxCategory("PERSONAL");
+                      setEditTxPersonId("");
+                    }
+                    setEditModalOpen(true);
+                  }}
+                  className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors flex justify-between items-center cursor-pointer group"
                 >
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-gray-800 dark:text-gray-200">
-                        {tx.merchant}
-                      </span>
-                      {/* NEW: Split Badge */}
-                      {tx.is_split && (
-                        <span className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1 border border-gray-200 dark:border-gray-700">
-                          <span className="material-symbols-outlined !text-[12px]">
-                            content_cut
-                          </span>{" "}
-                          Split
-                        </span>
-                      )}
+                  <div className="flex items-center gap-4 min-w-0 py-1CAte">
+                    {/* 1. Emoji Icon */}
+                    <div className="w-12 h-12 shrink-0 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-2xl shadow-sm border border-gray-200 dark:border-gray-700 group-hover:scale-105 transition-transform">
+                      {getCategoryEmoji(tx.merchant)}
                     </div>
-                    <span className="text-xs text-gray-400 mt-1">
-                      {formatDate(tx.date)} • {cleanLocation(tx.location)} •{" "}
-                      {tx.card_type}
-                    </span>
+
+                    {/* 2 & 3. Text Info */}
+                    <div className="flex flex-col overflow-hidden">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-bold text-gray-800 dark:text-gray-200 truncate">
+                          {tx.merchant}
+                        </span>
+                        {tx.is_split && (
+                          <span className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1 border border-gray-200 dark:border-gray-700 shrink-0">
+                            <span className="material-symbols-outlined !text-[12px]">
+                              content_cut
+                            </span>{" "}
+                            Split
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                        {getCardDetails(tx)} ∘ {formatDateTime(tx.date)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
+
+                  {/* 4. Amount */}
+                  <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
                     <span
-                      className={`font-bold whitespace-nowrap ${tx.is_third_party ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"}`}
+                      className={`text-lg font-extrabold whitespace-nowrap ${tx.is_third_party ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"}`}
                     >
                       - ₡{formatCurrency(Number(tx.amount))}
                     </span>
-                    <button
-                      onClick={() => {
-                        setSelectedTx(tx);
-                        setEditTxMerchant(tx.merchant);
-                        setIsSplitAction(false);
-                        setSplitAmount("");
-                        if (tx.is_third_party) {
-                          setEditTxCategory("THIRD_PARTY");
-                          setEditTxPersonId(tx.third_party_id || "");
-                        } else if (tx.is_base) {
-                          setEditTxCategory("FIXED");
-                          setEditTxPersonId("");
-                        } else {
-                          setEditTxCategory("PERSONAL");
-                          setEditTxPersonId("");
-                        }
-                        setEditModalOpen(true);
-                      }}
-                      className="flex items-center justify-center gap-1 text-[10px] px-3 py-1.5 rounded transition-colors font-bold bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 uppercase tracking-wider"
-                    >
-                      {tx.is_third_party ? (
-                        `FOR: ${tx.third_party_name}`
-                      ) : (
-                        <>
-                          <span className="material-symbols-outlined !text-[14px]">
-                            edit
-                          </span>
-                          EDIT
-                        </>
-                      )}
-                    </button>
+                    {tx.is_third_party && (
+                      <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider bg-orange-50 dark:bg-orange-900/30 px-2 py-0.5 rounded">
+                        FOR: {tx.third_party_name}
+                      </span>
+                    )}
                   </div>
                 </li>
               ))
@@ -1155,36 +1290,180 @@ function App() {
       {/* Edit Recent Transaction Modal */}
       {editModalOpen && selectedTx && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-fade-in">
-          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col border border-gray-200 dark:border-gray-800 transition-colors duration-300 animate-scale-up">
-            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-950">
-              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100">
-                Edit Transaction
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh] border border-gray-200 dark:border-gray-800 transition-colors duration-300 animate-scale-up">
+            {/* Header */}
+            <div className="p-5 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-950 shrink-0">
+              <h2 className="font-bold text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <span className="material-symbols-outlined">receipt_long</span>
+                Transaction Details
               </h2>
               <button
                 onClick={() => setEditModalOpen(false)}
-                className="text-gray-400 hover:text-red-500 font-bold"
+                className="text-gray-400 hover:text-red-500 font-bold transition-colors"
               >
                 ✕
               </button>
             </div>
-            <div className="p-5 flex flex-col gap-4">
-              <div>
-                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 block">
-                  Description / Note
-                </label>
-                <input
-                  type="text"
-                  value={editTxMerchant}
-                  onChange={(e) => setEditTxMerchant(e.target.value)}
-                  className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-indigo-500 font-medium"
-                />
+
+            {/* Scrollable Content */}
+            <div className="p-5 flex flex-col gap-5 overflow-y-auto custom-scrollbar">
+              {/* 1. RECEIPT CARD (With Inline Edit for Merchant) */}
+              <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
+                <div className="flex justify-between items-start mb-4 gap-3">
+                  {/* Contenedor principal con min-w-0 y flex-1 para evitar desbordamiento */}
+                  <div className="flex items-center gap-4 min-w-0 flex-1">
+                    <div className="w-12 h-12 rounded-full bg-white dark:bg-gray-700 flex items-center justify-center text-2xl shadow-sm border border-gray-100 dark:border-gray-600 shrink-0">
+                      {getCategoryEmoji(editTxMerchant)}
+                    </div>
+
+                    {/* Columna de texto con min-w-0 */}
+                    <div className="flex flex-col min-w-0 flex-1">
+                      {/* INLINE EDIT MERCHANT */}
+                      {isEditingMerchant ? (
+                        <input
+                          type="text"
+                          value={editTxMerchant}
+                          onChange={(e) => setEditTxMerchant(e.target.value)}
+                          onBlur={() => setIsEditingMerchant(false)}
+                          onKeyDown={(e) =>
+                            e.key === "Enter" && setIsEditingMerchant(false)
+                          }
+                          autoFocus
+                          className="border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white rounded px-2 py-1 text-lg font-extrabold outline-none focus:ring-2 focus:ring-indigo-500/50 w-full mb-1 min-w-0"
+                        />
+                      ) : (
+                        <div
+                          className="flex items-start gap-2 group cursor-pointer w-full min-w-0"
+                          onClick={() => setIsEditingMerchant(true)}
+                          title="Click to edit name"
+                        >
+                          {/* break-words obliga al texto largo a saltar de línea */}
+                          <h3 className="text-lg font-extrabold text-gray-800 dark:text-gray-100 leading-tight break-words min-w-0 flex-1">
+                            {editTxMerchant}
+                          </h3>
+                          <span className="material-symbols-outlined text-[16px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity bg-gray-200 dark:bg-gray-700 rounded-full p-0.5 shrink-0 mt-0.5">
+                            edit
+                          </span>
+                        </div>
+                      )}
+
+                      <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-bold mt-1">
+                        Total Amount
+                      </p>
+                      <p className="text-2xl font-extrabold text-gray-800 dark:text-gray-100 truncate">
+                        ₡{formatCurrency(Number(selectedTx.amount))}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Badge de Split con shrink-0 para que no lo aplasten */}
+                  {selectedTx.is_split && (
+                    <span className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider flex items-center gap-1 border border-indigo-200 dark:border-indigo-800 shrink-0">
+                      <span className="material-symbols-outlined !text-[14px]">
+                        content_cut
+                      </span>{" "}
+                      Split
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm pt-4 border-t border-gray-200 dark:border-gray-700/50">
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold mb-0.5">
+                      Date & Time
+                    </p>
+                    <p className="font-medium text-gray-700 dark:text-gray-300 truncate">
+                      {formatDateTime(selectedTx.date)}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold mb-0.5">
+                      Payment Method
+                    </p>
+                    <p className="font-medium text-gray-700 dark:text-gray-300 truncate">
+                      {getCardDetails(selectedTx)}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold mb-0.5">
+                      Location
+                    </p>
+                    <p
+                      className="font-medium text-gray-700 dark:text-gray-300 truncate pr-2"
+                      title={selectedTx.location}
+                    >
+                      {cleanLocation(selectedTx.location)}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-bold mb-0.5">
+                      Auth Code
+                    </p>
+                    <p className="font-mono text-xs text-gray-500 dark:text-gray-400 bg-gray-200 dark:bg-gray-900 px-1.5 py-0.5 rounded inline-block truncate max-w-full">
+                      {selectedTx.auth_code}
+                    </p>
+                  </div>
+                </div>
               </div>
+
+              {/* 2. EDITABLE FORM */}
               <div>
-                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 block">
+                {/* 2. NOTES SECTION */}
+                <div>
+                  <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 block uppercase tracking-wider flex items-center gap-1">
+                    <span className="material-symbols-outlined !text-[16px]">
+                      notes
+                    </span>
+                    Notes
+                  </label>
+
+                  {isEditingNote ? (
+                    <div className="animate-fade-in">
+                      <textarea
+                        value={editTxNote}
+                        onChange={(e) => setEditTxNote(e.target.value)}
+                        placeholder="Add extra details about this expense..."
+                        rows={3}
+                        autoFocus
+                        onBlur={() => setIsEditingNote(false)}
+                        className="border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white rounded-lg px-4 py-2.5 text-sm w-full outline-none focus:ring-2 focus:ring-indigo-500/50 font-medium transition-all resize-none custom-scrollbar shadow-sm"
+                      />
+                    </div>
+                  ) : editTxNote ? (
+                    <div
+                      onClick={() => setIsEditingNote(true)}
+                      className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group flex justify-between items-start animate-fade-in"
+                      title="Click to edit note"
+                    >
+                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-medium leading-relaxed">
+                        {editTxNote}
+                      </p>
+                      <span className="material-symbols-outlined text-[16px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-900 rounded-full p-1 shadow-sm shrink-0 ml-2">
+                        edit
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setIsEditingNote(true)}
+                      className="w-full border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-3 text-sm font-bold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all flex items-center justify-center gap-2 animate-fade-in"
+                    >
+                      <span className="material-symbols-outlined !text-[18px]">
+                        add
+                      </span>
+                      Add Note
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 block uppercase tracking-wider">
                   Category
                 </label>
                 <div className="flex flex-col gap-2">
-                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                  <label
+                    className={`flex items-center gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${editTxCategory === "PERSONAL" ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+                  >
                     <input
                       type="radio"
                       name="tx_category"
@@ -1192,11 +1471,13 @@ function App() {
                       onChange={() => setEditTxCategory("PERSONAL")}
                       className="w-4 h-4 text-indigo-600"
                     />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
                       Personal (Variable)
                     </span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                  <label
+                    className={`flex items-center gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${editTxCategory === "FIXED" ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+                  >
                     <input
                       type="radio"
                       name="tx_category"
@@ -1204,11 +1485,13 @@ function App() {
                       onChange={() => setEditTxCategory("FIXED")}
                       className="w-4 h-4 text-indigo-600"
                     />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
                       Fixed Expense (Bills, etc)
                     </span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer p-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                  <label
+                    className={`flex items-center gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${editTxCategory === "THIRD_PARTY" ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+                  >
                     <input
                       type="radio"
                       name="tx_category"
@@ -1216,7 +1499,7 @@ function App() {
                       onChange={() => setEditTxCategory("THIRD_PARTY")}
                       className="w-4 h-4 text-indigo-600"
                     />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
                       Lent to Someone
                     </span>
                   </label>
@@ -1225,14 +1508,14 @@ function App() {
 
               {/* Conditional Select for Third Parties */}
               {editTxCategory === "THIRD_PARTY" && (
-                <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-                  <label className="text-xs font-semibold text-orange-600 dark:text-orange-400 mb-1 block">
+                <div className="animate-fade-in">
+                  <label className="text-xs font-bold text-orange-600 dark:text-orange-400 mb-1.5 block uppercase tracking-wider">
                     Select Person
                   </label>
                   <select
                     value={editTxPersonId}
                     onChange={(e) => setEditTxPersonId(e.target.value)}
-                    className="border border-orange-300 dark:border-gray-700 rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-orange-500 bg-orange-50 dark:bg-gray-800 text-gray-800 dark:text-white"
+                    className="border border-orange-300 dark:border-orange-700/50 rounded-lg px-4 py-2.5 text-sm w-full outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 bg-orange-50 dark:bg-orange-950/20 text-gray-800 dark:text-white font-medium transition-all"
                   >
                     <option value="" disabled className="dark:bg-gray-800">
                       -- Choose a person --
@@ -1248,18 +1531,18 @@ function App() {
                     ))}
                   </select>
 
-                  {/* NEW: The Scissors Tool (Only show if this transaction hasn't been split before) */}
+                  {/* The Scissors Tool */}
                   {!selectedTx?.is_split && (
-                    <div className="mt-4 p-3 bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/50 rounded-lg">
-                      <label className="flex items-center gap-2 cursor-pointer">
+                    <div className="mt-4 p-4 bg-orange-50/80 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/50 rounded-xl">
+                      <label className="flex items-center gap-3 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={isSplitAction}
                           onChange={(e) => setIsSplitAction(e.target.checked)}
-                          className="w-4 h-4 text-orange-600"
+                          className="w-4 h-4 text-orange-600 rounded"
                         />
-                        <span className="text-sm font-bold text-orange-700 dark:text-orange-500 flex items-center gap-1">
-                          <span className="material-symbols-outlined !text-[16px]">
+                        <span className="text-sm font-bold text-orange-700 dark:text-orange-500 flex items-center gap-1.5">
+                          <span className="material-symbols-outlined !text-[18px]">
                             content_cut
                           </span>
                           Split expense with me
@@ -1267,9 +1550,9 @@ function App() {
                       </label>
 
                       {isSplitAction && (
-                        <div className="mt-3 ml-6 animate-in fade-in">
-                          <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1 block">
-                            How much does they owe you? (Max: ₡
+                        <div className="mt-4 ml-7 animate-fade-in">
+                          <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 block">
+                            How much do they owe you? (Max: ₡
                             {formatCurrency(Number(selectedTx.amount))})
                           </label>
                           <input
@@ -1277,9 +1560,9 @@ function App() {
                             value={splitAmount}
                             onChange={(e) => setSplitAmount(e.target.value)}
                             placeholder="e.g. 3000"
-                            className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-3 py-2 text-sm w-full outline-none focus:border-orange-500 mb-2"
+                            className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-4 py-2 text-sm w-full outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 mb-2 font-medium"
                           />
-                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 p-2 rounded-md border border-gray-100 dark:border-gray-800">
                             Your personal expense will be:{" "}
                             <span className="font-bold text-red-500 dark:text-red-400">
                               ₡
@@ -1295,29 +1578,34 @@ function App() {
                   )}
 
                   {thirdParties.length === 0 && (
-                    <p className="text-xs text-red-500 mt-1">
+                    <p className="text-xs font-bold text-red-500 mt-2 flex items-center gap-1">
+                      <span className="material-symbols-outlined !text-[14px]">
+                        error
+                      </span>
                       Please add people in "Manage People" first.
                     </p>
                   )}
                 </div>
               )}
+            </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3 mt-4">
-                <button
-                  onClick={handleDeleteRecentTx}
-                  className="w-1/3 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/30 dark:hover:bg-red-900/50 dark:text-red-400 font-bold py-3 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-1"
-                  title="Delete Transaction"
-                >
-                  Delete
-                </button>
-                <button
-                  onClick={handleSaveRecentTx}
-                  className="w-2/3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors shadow-md"
-                >
-                  Save Changes
-                </button>
-              </div>
+            {/* Action Buttons (Footer) */}
+            <div className="p-5 border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 shrink-0 flex gap-3">
+              <button
+                onClick={handleDeleteRecentTx}
+                className="w-1/4 bg-red-50 hover:bg-red-100 text-red-600 dark:bg-red-950/30 dark:hover:bg-red-900/50 dark:text-red-400 font-bold py-3 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-1"
+                title="Delete Transaction"
+              >
+                <span className="material-symbols-outlined !text-[20px]">
+                  delete
+                </span>
+              </button>
+              <button
+                onClick={handleSaveRecentTx}
+                className="w-3/4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors shadow-md"
+              >
+                Save Changes
+              </button>
             </div>
           </div>
         </div>
