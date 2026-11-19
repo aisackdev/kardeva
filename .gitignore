@@ -1,21 +1,38 @@
-# Dependencias de Node (Cubre tanto frontend como backend)
+# Dependencies (covers backend, frontend and any nested folder)
 node_modules/
-npm-debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Archivos de entorno (¡NUNCA SE SUBEN A GITHUB!)
+# Environment files (never commit secrets!)
 .env
 .env.*
 !.env.example
 
-# Carpetas de compilación
+# Build outputs
 dist/
+dist-ssr/
 build/
+*.tsbuildinfo
 
-# Bases de datos locales
+# Local databases & persistent volumes
 *.sqlite
 postgres_data/
+postgres_data_prod/
 
-# Archivos de Sistema Operativo y Editores
+# Operating System & IDE configurations
 .DS_Store
-.vscode/
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Analysis & packing tools dumps
+*repomix*

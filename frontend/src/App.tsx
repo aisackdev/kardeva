@@ -68,6 +68,10 @@ function App() {
   const [isBaseIncome, setIsBaseIncome] = useState<boolean>(true);
   const [editingIncomeId, setEditingIncomeId] = useState<string | null>(null);
 
+  // Tasa 0 logic
+  const [isTasaCeroAction, setIsTasaCeroAction] = useState<boolean>(false);
+  const [tasaCeroMonths, setTasaCeroMonths] = useState<string>("3");
+
   const getTodayDate = () => {
     const now = new Date();
     const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
@@ -522,11 +526,31 @@ function App() {
         // Send our new split instructions
         is_split_action: isSplitAction,
         split_amount: splitAmount,
+        is_tasa_cero_action: isTasaCeroAction,
+        tasa_cero_months: Number(tasaCeroMonths),
       }),
     }).then(() => {
       setEditModalOpen(false);
       setSelectedTx(null);
     });
+  };
+
+  const handleRevertTasaCero = () => {
+    if (!selectedTx) return;
+    requestConfirm(
+      "Revert Tasa 0",
+      "Are you sure? This will delete all future installments and restore the original full amount to this month.",
+      () => {
+        fetchWithAuth(`/api/transactions/${selectedTx.id}/edit`, {
+          method: "PATCH",
+          body: JSON.stringify({ revert_tasa_cero_action: true }),
+        }).then(() => {
+          setEditModalOpen(false);
+          closeConfirm();
+        });
+      },
+      "Revert",
+    );
   };
 
   const handleDeleteRecentTx = () => {
@@ -639,6 +663,31 @@ function App() {
     );
   };
 
+  const handleRevertFixedExpense = (id: string) => {
+    const expense = fixedExpensesList.find((f) => f.id === id);
+    const expenseName = expense?.merchant || "this expense";
+
+    requestConfirm(
+      "Revert to Normal Expense",
+      `Are you sure you want to remove "${expenseName}" from Fixed Expenses? It will be moved back to your normal transactions list.`,
+      () => {
+        fetchWithAuth(`/api/transactions/${id}`, { method: "DELETE" })
+          .then(() => {
+            fetchFixedExpenses();
+            fetchTransactions(); // Refresh normal transactions list
+            fetchSummary();
+            closeConfirm();
+          })
+          .catch((error) => {
+            console.error("Error reverting expense:", error);
+            alert("Failed to revert expense.");
+            closeConfirm();
+          });
+      },
+      "Revert", // Custom text for the red button
+    );
+  };
+
   const formatCurrency = (amount: number) =>
     amount.toLocaleString("es-CR", { maximumFractionDigits: 0 });
 
@@ -659,6 +708,22 @@ function App() {
 
   const displayedChartData =
     chartRange === "ALL" ? chartData : chartData.slice(-chartRange);
+
+  // --- NEW: CHECK IF TRANSACTION WAS MODIFIED ---
+  const hasTxChanges = selectedTx
+    ? editTxMerchant.trim() !== selectedTx.merchant ||
+      editTxNote.trim() !== (selectedTx.note || "") ||
+      editTxCategory !==
+        (selectedTx.is_third_party
+          ? "THIRD_PARTY"
+          : selectedTx.is_base
+            ? "FIXED"
+            : "PERSONAL") ||
+      (editTxCategory === "THIRD_PARTY" &&
+        editTxPersonId !== (selectedTx.third_party_id || "")) ||
+      isSplitAction ||
+      isTasaCeroAction
+    : false;
 
   // --- NEW: MEMOIZED CHART TO PREVENT RE-RENDER LAG ---
   const chartComponent = useMemo(() => {
@@ -887,7 +952,7 @@ function App() {
       digits = "";
     }
 
-    return digits ? `${type} ∘ ${digits}` : type;
+    return digits ? `${type} | ${digits}` : type;
   };
 
   // --- RENDER 2: MAIN DASHBOARD ---
@@ -1088,7 +1153,8 @@ function App() {
               Available Balance
             </span>
             <span className="text-xl font-extrabold text-white dark:text-white whitespace-nowrap">
-              = ₡{formatCurrency(availableBalance)}
+              {availableBalance >= 0 ? "+" : "-"} ₡
+              {formatCurrency(Math.abs(availableBalance))}
             </span>
           </div>
         </div>
@@ -1121,6 +1187,8 @@ function App() {
                     setIsEditingNote(false);
                     setIsSplitAction(false);
                     setSplitAmount("");
+                    setIsTasaCeroAction(false);
+                    setTasaCeroMonths("3");
                     if (tx.is_third_party) {
                       setEditTxCategory("THIRD_PARTY");
                       setEditTxPersonId(tx.third_party_id || "");
@@ -1147,6 +1215,8 @@ function App() {
                         <span className="text-base font-bold text-gray-800 dark:text-gray-200 truncate">
                           {tx.merchant}
                         </span>
+
+                        {/* SPLIT BADGE */}
                         {tx.is_split && (
                           <span className="bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1 border border-gray-200 dark:border-gray-700 shrink-0">
                             <span className="material-symbols-outlined !text-[12px]">
@@ -1155,9 +1225,19 @@ function App() {
                             Split
                           </span>
                         )}
+
+                        {/* TASA 0 BADGE (NEW) */}
+                        {tx.is_tasa_cero && (
+                          <span className="bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider flex items-center gap-1 border border-blue-200 dark:border-blue-700 shrink-0">
+                            <span className="material-symbols-outlined !text-[12px]">
+                              calendar_month
+                            </span>{" "}
+                            Tasa 0
+                          </span>
+                        )}
                       </div>
                       <span className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                        {getCardDetails(tx)} ∘ {formatDateTime(tx.date)}
+                        {getCardDetails(tx)} | {formatDateTime(tx.date)}
                       </span>
                     </div>
                   </div>
@@ -1165,7 +1245,13 @@ function App() {
                   {/* 4. Amount */}
                   <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
                     <span
-                      className={`text-lg font-extrabold whitespace-nowrap ${tx.is_third_party ? "text-orange-600 dark:text-orange-400" : "text-red-600 dark:text-red-400"}`}
+                      className={`text-lg font-extrabold whitespace-nowrap ${
+                        tx.is_tasa_cero
+                          ? "text-gray-400 dark:text-gray-600 line-through"
+                          : tx.is_third_party
+                            ? "text-orange-600 dark:text-orange-400"
+                            : "text-red-600 dark:text-red-400"
+                      }`}
                     >
                       - ₡{formatCurrency(Number(tx.amount))}
                     </span>
@@ -1299,7 +1385,8 @@ function App() {
               </h2>
               <button
                 onClick={() => setEditModalOpen(false)}
-                className="text-gray-400 hover:text-red-500 font-bold transition-colors"
+                className="text-gray-400 hover:text-red-500 font-bold transition-colors p-2 text-2xl leading-none flex items-center justify-center"
+                title="Close"
               >
                 ✕
               </button>
@@ -1310,15 +1397,11 @@ function App() {
               {/* 1. RECEIPT CARD (With Inline Edit for Merchant) */}
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm">
                 <div className="flex justify-between items-start mb-4 gap-3">
-                  {/* Contenedor principal con min-w-0 y flex-1 para evitar desbordamiento */}
                   <div className="flex items-center gap-4 min-w-0 flex-1">
                     <div className="w-12 h-12 rounded-full bg-white dark:bg-gray-700 flex items-center justify-center text-2xl shadow-sm border border-gray-100 dark:border-gray-600 shrink-0">
                       {getCategoryEmoji(editTxMerchant)}
                     </div>
-
-                    {/* Columna de texto con min-w-0 */}
                     <div className="flex flex-col min-w-0 flex-1">
-                      {/* INLINE EDIT MERCHANT */}
                       {isEditingMerchant ? (
                         <input
                           type="text"
@@ -1337,7 +1420,6 @@ function App() {
                           onClick={() => setIsEditingMerchant(true)}
                           title="Click to edit name"
                         >
-                          {/* break-words obliga al texto largo a saltar de línea */}
                           <h3 className="text-lg font-extrabold text-gray-800 dark:text-gray-100 leading-tight break-words min-w-0 flex-1">
                             {editTxMerchant}
                           </h3>
@@ -1346,7 +1428,6 @@ function App() {
                           </span>
                         </div>
                       )}
-
                       <p className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-bold mt-1">
                         Total Amount
                       </p>
@@ -1355,8 +1436,6 @@ function App() {
                       </p>
                     </div>
                   </div>
-
-                  {/* Badge de Split con shrink-0 para que no lo aplasten */}
                   {selectedTx.is_split && (
                     <span className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-[10px] px-2 py-1 rounded-md font-bold uppercase tracking-wider flex items-center gap-1 border border-indigo-200 dark:border-indigo-800 shrink-0">
                       <span className="material-symbols-outlined !text-[14px]">
@@ -1406,184 +1485,261 @@ function App() {
                 </div>
               </div>
 
-              {/* 2. EDITABLE FORM */}
-              <div>
-                {/* 2. NOTES SECTION */}
-                <div>
-                  <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 block uppercase tracking-wider flex items-center gap-1">
-                    <span className="material-symbols-outlined !text-[16px]">
-                      notes
-                    </span>
-                    Notes
-                  </label>
-
-                  {isEditingNote ? (
-                    <div className="animate-fade-in">
-                      <textarea
-                        value={editTxNote}
-                        onChange={(e) => setEditTxNote(e.target.value)}
-                        placeholder="Add extra details about this expense..."
-                        rows={3}
-                        autoFocus
-                        onBlur={() => setIsEditingNote(false)}
-                        className="border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white rounded-lg px-4 py-2.5 text-sm w-full outline-none focus:ring-2 focus:ring-indigo-500/50 font-medium transition-all resize-none custom-scrollbar shadow-sm"
-                      />
-                    </div>
-                  ) : editTxNote ? (
-                    <div
-                      onClick={() => setIsEditingNote(true)}
-                      className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group flex justify-between items-start animate-fade-in"
-                      title="Click to edit note"
-                    >
-                      <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-medium leading-relaxed">
-                        {editTxNote}
-                      </p>
-                      <span className="material-symbols-outlined text-[16px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-900 rounded-full p-1 shadow-sm shrink-0 ml-2">
-                        edit
-                      </span>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setIsEditingNote(true)}
-                      className="w-full border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-3 text-sm font-bold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all flex items-center justify-center gap-2 animate-fade-in"
-                    >
-                      <span className="material-symbols-outlined !text-[18px]">
-                        add
-                      </span>
-                      Add Note
-                    </button>
-                  )}
+              {/* 2. EDITABLE FORM OR TASA 0 REVERT */}
+              {selectedTx.is_tasa_cero ? (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6 text-center animate-fade-in">
+                  <span className="material-symbols-outlined text-blue-500 text-4xl mb-2">
+                    calendar_month
+                  </span>
+                  <h3 className="text-lg font-bold text-blue-800 dark:text-blue-300 mb-2">
+                    Active Tasa 0
+                  </h3>
+                  <p className="text-sm text-blue-600 dark:text-blue-400 mb-4">
+                    This transaction is currently hidden from your monthly
+                    expenses and split into future installments.
+                  </p>
+                  <button
+                    onClick={handleRevertTasaCero}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition-colors shadow-md"
+                  >
+                    Revert to Normal Expense
+                  </button>
                 </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 block uppercase tracking-wider">
-                  Category
-                </label>
-                <div className="flex flex-col gap-2">
-                  <label
-                    className={`flex items-center gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${editTxCategory === "PERSONAL" ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
-                  >
-                    <input
-                      type="radio"
-                      name="tx_category"
-                      checked={editTxCategory === "PERSONAL"}
-                      onChange={() => setEditTxCategory("PERSONAL")}
-                      className="w-4 h-4 text-indigo-600"
-                    />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                      Personal (Variable)
-                    </span>
-                  </label>
-                  <label
-                    className={`flex items-center gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${editTxCategory === "FIXED" ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
-                  >
-                    <input
-                      type="radio"
-                      name="tx_category"
-                      checked={editTxCategory === "FIXED"}
-                      onChange={() => setEditTxCategory("FIXED")}
-                      className="w-4 h-4 text-indigo-600"
-                    />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                      Fixed Expense (Bills, etc)
-                    </span>
-                  </label>
-                  <label
-                    className={`flex items-center gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${editTxCategory === "THIRD_PARTY" ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
-                  >
-                    <input
-                      type="radio"
-                      name="tx_category"
-                      checked={editTxCategory === "THIRD_PARTY"}
-                      onChange={() => setEditTxCategory("THIRD_PARTY")}
-                      className="w-4 h-4 text-indigo-600"
-                    />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                      Lent to Someone
-                    </span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Conditional Select for Third Parties */}
-              {editTxCategory === "THIRD_PARTY" && (
-                <div className="animate-fade-in">
-                  <label className="text-xs font-bold text-orange-600 dark:text-orange-400 mb-1.5 block uppercase tracking-wider">
-                    Select Person
-                  </label>
-                  <select
-                    value={editTxPersonId}
-                    onChange={(e) => setEditTxPersonId(e.target.value)}
-                    className="border border-orange-300 dark:border-orange-700/50 rounded-lg px-4 py-2.5 text-sm w-full outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 bg-orange-50 dark:bg-orange-950/20 text-gray-800 dark:text-white font-medium transition-all"
-                  >
-                    <option value="" disabled className="dark:bg-gray-800">
-                      -- Choose a person --
-                    </option>
-                    {thirdParties.map((p) => (
-                      <option
-                        key={p.id}
-                        value={p.id}
-                        className="dark:bg-gray-800"
+              ) : (
+                <div className="flex flex-col gap-5">
+                  {/* NOTES SECTION */}
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 block uppercase tracking-wider flex items-center gap-1">
+                      <span className="material-symbols-outlined !text-[16px]">
+                        notes
+                      </span>
+                      Notes
+                    </label>
+                    {isEditingNote ? (
+                      <div className="animate-fade-in">
+                        <textarea
+                          value={editTxNote}
+                          onChange={(e) => setEditTxNote(e.target.value)}
+                          placeholder="Add extra details about this expense..."
+                          rows={3}
+                          autoFocus
+                          onBlur={() => setIsEditingNote(false)}
+                          className="border border-indigo-300 dark:border-indigo-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-white rounded-lg px-4 py-2.5 text-sm w-full outline-none focus:ring-2 focus:ring-indigo-500/50 font-medium transition-all resize-none custom-scrollbar shadow-sm"
+                        />
+                      </div>
+                    ) : editTxNote ? (
+                      <div
+                        onClick={() => setIsEditingNote(true)}
+                        className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group flex justify-between items-start animate-fade-in"
+                        title="Click to edit note"
                       >
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                        <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-medium leading-relaxed">
+                          {editTxNote}
+                        </p>
+                        <span className="material-symbols-outlined text-[16px] text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity bg-white dark:bg-gray-900 rounded-full p-1 shadow-sm shrink-0 ml-2">
+                          edit
+                        </span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setIsEditingNote(true)}
+                        className="w-full border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-3 text-sm font-bold text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-indigo-400 dark:hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all flex items-center justify-center gap-2 animate-fade-in"
+                      >
+                        <span className="material-symbols-outlined !text-[18px]">
+                          add
+                        </span>
+                        Add Note
+                      </button>
+                    )}
+                  </div>
 
-                  {/* The Scissors Tool */}
+                  {/* CATEGORY SECTION */}
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 block uppercase tracking-wider">
+                      Category
+                    </label>
+                    <div className="flex flex-col gap-2">
+                      <label
+                        className={`flex items-center gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${editTxCategory === "PERSONAL" ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="tx_category"
+                          checked={editTxCategory === "PERSONAL"}
+                          onChange={() => setEditTxCategory("PERSONAL")}
+                          className="w-4 h-4 text-indigo-600"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                          Personal (Variable)
+                        </span>
+                      </label>
+                      <label
+                        className={`flex items-center gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${editTxCategory === "FIXED" ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="tx_category"
+                          checked={editTxCategory === "FIXED"}
+                          onChange={() => setEditTxCategory("FIXED")}
+                          className="w-4 h-4 text-indigo-600"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                          Fixed Expense (Bills, etc)
+                        </span>
+                      </label>
+                      <label
+                        className={`flex items-center gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${editTxCategory === "THIRD_PARTY" ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+                      >
+                        <input
+                          type="radio"
+                          name="tx_category"
+                          checked={editTxCategory === "THIRD_PARTY"}
+                          onChange={() => setEditTxCategory("THIRD_PARTY")}
+                          className="w-4 h-4 text-indigo-600"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                          Lent to Someone
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* THIRD PARTY SELECT & SPLIT */}
+                  {editTxCategory === "THIRD_PARTY" && (
+                    <div className="animate-fade-in">
+                      <label className="text-xs font-bold text-orange-600 dark:text-orange-400 mb-1.5 block uppercase tracking-wider">
+                        Select Person
+                      </label>
+                      <select
+                        value={editTxPersonId}
+                        onChange={(e) => setEditTxPersonId(e.target.value)}
+                        className="border border-orange-300 dark:border-orange-700/50 rounded-lg px-4 py-2.5 text-sm w-full outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 bg-orange-50 dark:bg-orange-950/20 text-gray-800 dark:text-white font-medium transition-all"
+                      >
+                        <option value="" disabled className="dark:bg-gray-800">
+                          -- Choose a person --
+                        </option>
+                        {thirdParties.map((p) => (
+                          <option
+                            key={p.id}
+                            value={p.id}
+                            className="dark:bg-gray-800"
+                          >
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      {/* The Scissors Tool */}
+                      {!selectedTx?.is_split && (
+                        <div className="mt-4 p-4 bg-orange-50/80 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/50 rounded-xl">
+                          <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={isSplitAction}
+                              onChange={(e) => {
+                                setIsSplitAction(e.target.checked);
+                                if (e.target.checked)
+                                  setIsTasaCeroAction(false);
+                              }}
+                              className="w-4 h-4 text-orange-600 rounded"
+                            />
+                            <span className="text-sm font-bold text-orange-700 dark:text-orange-500 flex items-center gap-1.5">
+                              <span className="material-symbols-outlined !text-[18px]">
+                                content_cut
+                              </span>
+                              Split expense with me
+                            </span>
+                          </label>
+
+                          {isSplitAction && (
+                            <div className="mt-4 ml-7 animate-fade-in">
+                              <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 block">
+                                How much do they owe you? (Max: ₡
+                                {formatCurrency(Number(selectedTx.amount))})
+                              </label>
+                              <input
+                                type="number"
+                                value={splitAmount}
+                                onChange={(e) => setSplitAmount(e.target.value)}
+                                placeholder="e.g. 3000"
+                                className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-4 py-2 text-sm w-full outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 mb-2 font-medium"
+                              />
+                              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 p-2 rounded-md border border-gray-100 dark:border-gray-800">
+                                Your personal expense will be:{" "}
+                                <span className="font-bold text-red-500 dark:text-red-400">
+                                  ₡
+                                  {formatCurrency(
+                                    Number(selectedTx.amount) -
+                                      Number(splitAmount || 0),
+                                  )}
+                                </span>
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {thirdParties.length === 0 && (
+                        <p className="text-xs font-bold text-red-500 mt-2 flex items-center gap-1">
+                          <span className="material-symbols-outlined !text-[14px]">
+                            error
+                          </span>
+                          Please add people in "Manage People" first.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TASA 0 TOOL */}
                   {!selectedTx?.is_split && (
-                    <div className="mt-4 p-4 bg-orange-50/80 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/50 rounded-xl">
+                    <div className="p-4 bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 rounded-xl">
                       <label className="flex items-center gap-3 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={isSplitAction}
-                          onChange={(e) => setIsSplitAction(e.target.checked)}
-                          className="w-4 h-4 text-orange-600 rounded"
+                          checked={isTasaCeroAction}
+                          onChange={(e) => {
+                            setIsTasaCeroAction(e.target.checked);
+                            if (e.target.checked) setIsSplitAction(false); // Mutually exclusive
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded"
                         />
-                        <span className="text-sm font-bold text-orange-700 dark:text-orange-500 flex items-center gap-1.5">
+                        <span className="text-sm font-bold text-blue-700 dark:text-blue-500 flex items-center gap-1.5">
                           <span className="material-symbols-outlined !text-[18px]">
-                            content_cut
+                            calendar_month
                           </span>
-                          Split expense with me
+                          Convert to Tasa 0
                         </span>
                       </label>
 
-                      {isSplitAction && (
+                      {isTasaCeroAction && (
                         <div className="mt-4 ml-7 animate-fade-in">
                           <label className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 block">
-                            How much do they owe you? (Max: ₡
-                            {formatCurrency(Number(selectedTx.amount))})
+                            How many months?
                           </label>
-                          <input
-                            type="number"
-                            value={splitAmount}
-                            onChange={(e) => setSplitAmount(e.target.value)}
-                            placeholder="e.g. 3000"
-                            className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-4 py-2 text-sm w-full outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 mb-2 font-medium"
-                          />
+                          <select
+                            value={tasaCeroMonths}
+                            onChange={(e) => setTasaCeroMonths(e.target.value)}
+                            className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-white rounded-lg px-4 py-2 text-sm w-full outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 mb-2 font-medium"
+                          >
+                            {[2, 3, 6, 10, 12, 18, 24].map((m) => (
+                              <option key={m} value={m}>
+                                {m} Months
+                              </option>
+                            ))}
+                          </select>
                           <p className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-900 p-2 rounded-md border border-gray-100 dark:border-gray-800">
-                            Your personal expense will be:{" "}
-                            <span className="font-bold text-red-500 dark:text-red-400">
+                            Monthly installment:{" "}
+                            <span className="font-bold text-blue-500 dark:text-blue-400">
                               ₡
                               {formatCurrency(
-                                Number(selectedTx.amount) -
-                                  Number(splitAmount || 0),
+                                Number(selectedTx.amount) /
+                                  Number(tasaCeroMonths),
                               )}
                             </span>
                           </p>
                         </div>
                       )}
                     </div>
-                  )}
-
-                  {thirdParties.length === 0 && (
-                    <p className="text-xs font-bold text-red-500 mt-2 flex items-center gap-1">
-                      <span className="material-symbols-outlined !text-[14px]">
-                        error
-                      </span>
-                      Please add people in "Manage People" first.
-                    </p>
                   )}
                 </div>
               )}
@@ -1602,7 +1758,12 @@ function App() {
               </button>
               <button
                 onClick={handleSaveRecentTx}
-                className="w-3/4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors shadow-md"
+                disabled={!hasTxChanges}
+                className={`w-3/4 font-bold py-3 rounded-lg transition-colors shadow-md ${
+                  hasTxChanges
+                    ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                    : "bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed shadow-none"
+                }`}
               >
                 Save Changes
               </button>
@@ -1822,14 +1983,29 @@ function App() {
                           edit
                         </span>
                       </button>
-                      <button
-                        onClick={() => handleDeleteFixedExpense(exp.id)}
-                        className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
-                      >
-                        <span className="material-symbols-outlined !text-[14px]">
-                          delete
-                        </span>
-                      </button>
+
+                      {/* CONDITIONAL BUTTON: Delete (Manual) vs Revert (Bank) */}
+                      {exp.auth_code?.startsWith("FIX-") ? (
+                        <button
+                          onClick={() => handleDeleteFixedExpense(exp.id)}
+                          className="flex items-center gap-1 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 px-3 py-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/50 font-semibold"
+                          title="Delete completely"
+                        >
+                          <span className="material-symbols-outlined !text-[14px]">
+                            delete
+                          </span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleRevertFixedExpense(exp.id)}
+                          className="flex items-center gap-1 text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 px-3 py-1.5 rounded hover:bg-orange-100 dark:hover:bg-orange-900/50 font-semibold"
+                          title="Revert to normal transaction"
+                        >
+                          <span className="material-symbols-outlined !text-[14px]">
+                            undo
+                          </span>
+                        </button>
+                      )}
                     </div>
                   </li>
                 ))}
@@ -1960,8 +2136,8 @@ function App() {
                       <span className="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono">
                         **** {card.last_four}{" "}
                         {card.cutoff_day
-                          ? `• Cutoff: Day ${card.cutoff_day}`
-                          : "• Immediate"}
+                          ? `| Cutoff: Day ${card.cutoff_day}`
+                          : "| Immediate"}
                       </span>
                     </div>
                     <div className="flex gap-2">

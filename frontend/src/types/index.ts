@@ -18,6 +18,8 @@ export interface Transaction {
   is_base: boolean;
   is_split: boolean;
   note?: string;
+  is_tasa_cero?: boolean;
+  parent_id?: string;
 }
 
 export interface ChartData {

@@ -52,7 +52,9 @@ export const initDB = async () => {
     ADD COLUMN IF NOT EXISTS billing_month VARCHAR(7),
     ADD COLUMN IF NOT EXISTS card_id UUID REFERENCES cards(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS is_split BOOLEAN DEFAULT FALSE,
-    ADD COLUMN IF NOT EXISTS note TEXT;
+    ADD COLUMN IF NOT EXISTS note TEXT,
+    ADD COLUMN IF NOT EXISTS is_tasa_cero BOOLEAN DEFAULT FALSE,
+    ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES transactions(id) ON DELETE CASCADE;
   `;
 
   const updateCardsTableQuery = `

@@ -40,6 +40,38 @@ const calculateBillingMonth = (
   return `${year}-${month.toString().padStart(2, "0")}`;
 };
 
+// Helper to add months to a YYYY-MM string safely
+const addMonthsToBilling = (
+  yyyyMM: string | null,
+  monthsToAdd: number,
+): string => {
+  if (!yyyyMM) {
+    // Fallback: If there's no billing month, use the current month
+    const now = new Date();
+    yyyyMM = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, "0")}`;
+  }
+
+  const [yearStr, monthStr] = yyyyMM.split("-");
+
+  // FIXED: Added || "0" to satisfy TypeScript's strict null checks
+  let year = parseInt(yearStr || "0", 10);
+  let month = parseInt(monthStr || "0", 10);
+
+  // Extra failsafe in case the string was completely malformed
+  if (!year || !month) {
+    const now = new Date();
+    year = now.getFullYear();
+    month = now.getMonth() + 1;
+  }
+
+  month += monthsToAdd;
+  while (month > 12) {
+    month -= 12;
+    year += 1;
+  }
+  return `${year}-${month.toString().padStart(2, "0")}`;
+};
+
 export const createTransaction = async (req: Request, res: Response) => {
   try {
     // We extract the data from the request body (req.body)
@@ -154,9 +186,9 @@ export const getSummary = async (req: Request, res: Response) => {
     const month = getMonthFilter(req);
     const summaryQuery = `
       SELECT 
-        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = false), 0) AS personal_expenses,
-        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = true), 0) AS fixed_expenses,
-        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = true), 0) AS third_party_expenses,
+        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = false AND is_tasa_cero = false), 0) AS personal_expenses,
+        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = true AND is_tasa_cero = false), 0) AS fixed_expenses,
+        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = true AND is_tasa_cero = false), 0) AS third_party_expenses,
         COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME' AND is_base = true), 0) AS base_income,
         COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME' AND is_base = false), 0) AS extra_income
       FROM transactions
@@ -192,7 +224,7 @@ export const getChartData = async (req: Request, res: Response) => {
         TO_CHAR(date, 'YYYY-MM-DD') as day,
         SUM(amount) as total
       FROM transactions
-      WHERE type = 'EXPENSE' AND billing_month = $1
+      WHERE type = 'EXPENSE' AND billing_month = $1 AND is_tasa_cero = false
       GROUP BY TO_CHAR(date, 'YYYY-MM-DD')
       ORDER BY day ASC
     `;
@@ -220,7 +252,92 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
     is_split_action,
     split_amount,
     note,
+    is_tasa_cero_action,
+    tasa_cero_months,
+    revert_tasa_cero_action,
   } = req.body;
+
+  // --- REVERT TASA 0 LOGIC ---
+  if (revert_tasa_cero_action) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      // 1. Delete all clones
+      await client.query("DELETE FROM transactions WHERE parent_id = $1", [id]);
+      // 2. Restore original
+      await client.query(
+        "UPDATE transactions SET is_tasa_cero = false WHERE id = $1",
+        [id],
+      );
+      await client.query("COMMIT");
+      broadcast("transaction_updated", {});
+      return res.status(200).json({ message: "Tasa 0 reverted successfully" });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      return res.status(500).json({ error: "Internal Server Error" });
+    } finally {
+      client.release();
+    }
+  }
+
+  // --- APPLY TASA 0 LOGIC ---
+  // --- APPLY TASA 0 LOGIC ---
+  if (is_tasa_cero_action && tasa_cero_months > 1) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const origResult = await client.query(
+        "SELECT * FROM transactions WHERE id = $1",
+        [id],
+      );
+      if (origResult.rows.length === 0) throw new Error("Not found");
+
+      const originalTx = origResult.rows[0];
+      const originalAmount = parseFloat(originalTx.amount);
+      const installmentAmount = originalAmount / tasa_cero_months;
+
+      // 1. Make original a ghost
+      await client.query(
+        "UPDATE transactions SET is_tasa_cero = true, note = $1 WHERE id = $2",
+        [note || null, id],
+      );
+
+      // 2. Create clones
+      const insertCloneQuery = `
+        INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, type, is_base, billing_month, card_id, parent_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10)
+      `;
+
+      for (let i = 0; i < tasa_cero_months; i++) {
+        const targetMonth = addMonthsToBilling(originalTx.billing_month, i);
+        const cloneMerchant = `${merchant} (Cuota ${i + 1}/${tasa_cero_months})`;
+        const cloneAuthCode = `${originalTx.auth_code}-T0-${i + 1}`; // Unique auth code
+
+        await client.query(insertCloneQuery, [
+          cloneMerchant,
+          originalTx.location || null,
+          originalTx.date,
+          originalTx.card_type || "Unknown",
+          cloneAuthCode,
+          installmentAmount,
+          originalTx.type || "EXPENSE",
+          targetMonth,
+          originalTx.card_id || null,
+          id,
+        ]);
+      }
+
+      await client.query("COMMIT");
+      broadcast("transaction_updated", {});
+      return res.status(200).json({ message: "Tasa 0 applied successfully" });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Error applying Tasa 0:", error); // <--- Esto imprimirá el error exacto en tu terminal
+      return res.status(500).json({ error: "Internal Server Error" });
+    } finally {
+      client.release();
+    }
+  }
 
   // --- THE SPLIT LOGIC ---
   if (is_split_action && split_amount) {
