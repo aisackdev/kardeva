@@ -71,6 +71,17 @@ export const initDB = async () => {
     WHERE billing_month IS NULL;
   `;
 
+  // NEW: Retroactively sync billing_month for transactions made on or after the card's cutoff day
+  const resyncCutoffBillingQuery = `
+    UPDATE transactions t
+    SET billing_month = TO_CHAR(
+      t.date + (CASE WHEN c.cutoff_day IS NOT NULL AND EXTRACT(DAY FROM t.date) >= c.cutoff_day THEN '1 month'::interval ELSE '0 month'::interval END), 
+      'YYYY-MM'
+    )
+    FROM cards c
+    WHERE t.card_id = c.id;
+  `;
+
   try {
     await pool.query(createThirdPartiesTableQuery);
     await pool.query(createTransactionsTableQuery);
@@ -78,6 +89,7 @@ export const initDB = async () => {
     await pool.query(addColumnsQuery);
     await pool.query(updateCardsTableQuery);
     await pool.query(backfillBillingMonthQuery);
+    await pool.query(resyncCutoffBillingQuery);
     console.log("✅ Database tables and migrations applied successfully.");
   } catch (error) {
     console.error("❌ Error setting up database:", error);

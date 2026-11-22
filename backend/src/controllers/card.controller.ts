@@ -41,7 +41,7 @@ export const createCard = async (req: Request, res: Response) => {
       SET 
         card_id = $1,
         billing_month = TO_CHAR(
-          date + (CASE WHEN $2::integer IS NOT NULL AND EXTRACT(DAY FROM date) > $2::integer THEN '1 month'::interval ELSE '0 month'::interval END), 
+          date + (CASE WHEN $2::integer IS NOT NULL AND EXTRACT(DAY FROM date) >= $2::integer THEN '1 month'::interval ELSE '0 month'::interval END), 
           'YYYY-MM'
         )
       WHERE card_type LIKE '%' || $3
@@ -145,7 +145,7 @@ export const updateCard = async (req: Request, res: Response) => {
       UPDATE transactions 
       SET 
         billing_month = TO_CHAR(
-          date + (CASE WHEN $1::integer IS NOT NULL AND EXTRACT(DAY FROM date) > $1::integer THEN '1 month'::interval ELSE '0 month'::interval END), 
+          date + (CASE WHEN $1::integer IS NOT NULL AND EXTRACT(DAY FROM date) >= $1::integer THEN '1 month'::interval ELSE '0 month'::interval END), 
           'YYYY-MM'
         )
       WHERE card_id = $2;

@@ -28,7 +28,7 @@ const calculateBillingMonth = (
   if (!year || !month) return "";
 
   // 3. If we have a cutoff day and the purchase day is AFTER the cutoff, shift to next month
-  if (cutoffDay && day > cutoffDay) {
+  if (cutoffDay && day >= cutoffDay) {
     month++;
     if (month > 12) {
       month = 1;
