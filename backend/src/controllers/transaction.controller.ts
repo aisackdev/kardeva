@@ -166,9 +166,13 @@ export const getTransactions = async (req: Request, res: Response) => {
     const month = getMonthFilter(req);
 
     const selectQuery = `
-      SELECT t.*, p.name as third_party_name 
+      SELECT 
+        t.*, 
+        p.name as third_party_name,
+        f.merchant as linked_fixed_name
       FROM transactions t
       LEFT JOIN third_parties p ON t.third_party_id = p.id
+      LEFT JOIN transactions f ON t.linked_fixed_id = f.id
       WHERE t.type = 'EXPENSE' AND t.is_base = false AND t.billing_month = $1
       ORDER BY t.date DESC
     `;
@@ -186,7 +190,7 @@ export const getSummary = async (req: Request, res: Response) => {
     const month = getMonthFilter(req);
     const summaryQuery = `
       SELECT 
-        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = false AND is_tasa_cero = false), 0) AS personal_expenses,
+        COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = false AND is_tasa_cero = false AND linked_fixed_id IS NULL), 0) AS personal_expenses,
         COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = false AND is_base = true AND is_tasa_cero = false), 0) AS fixed_expenses,
         COALESCE(SUM(amount) FILTER (WHERE type = 'EXPENSE' AND is_third_party = true AND is_tasa_cero = false), 0) AS third_party_expenses,
         COALESCE(SUM(amount) FILTER (WHERE type = 'INCOME' AND is_base = true), 0) AS base_income,
@@ -224,7 +228,7 @@ export const getChartData = async (req: Request, res: Response) => {
         TO_CHAR(date, 'YYYY-MM-DD') as day,
         SUM(amount) as total
       FROM transactions
-      WHERE type = 'EXPENSE' AND billing_month = $1 AND is_tasa_cero = false
+      WHERE type = 'EXPENSE' AND billing_month = $1 AND is_tasa_cero = false AND is_base = false AND linked_fixed_id IS NULL
       GROUP BY TO_CHAR(date, 'YYYY-MM-DD')
       ORDER BY day ASC
     `;
@@ -255,6 +259,7 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
     is_tasa_cero_action,
     tasa_cero_months,
     revert_tasa_cero_action,
+    linked_fixed_id,
   } = req.body;
 
   // --- REVERT TASA 0 LOGIC ---
@@ -280,7 +285,6 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
     }
   }
 
-  // --- APPLY TASA 0 LOGIC ---
   // --- APPLY TASA 0 LOGIC ---
   if (is_tasa_cero_action && tasa_cero_months > 1) {
     const client = await pool.connect();
@@ -436,8 +440,8 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
   try {
     const updateQuery = `
       UPDATE transactions 
-      SET merchant = $1, is_base = $2, is_third_party = $3, third_party_id = $4, note = $5
-      WHERE id = $6
+      SET merchant = $1, is_base = $2, is_third_party = $3, third_party_id = $4, note = $5, linked_fixed_id = $6
+      WHERE id = $7
       RETURNING *;
     `;
     const result = await pool.query(updateQuery, [
@@ -446,6 +450,7 @@ export const updateRecentTransaction = async (req: Request, res: Response) => {
       is_third_party,
       third_party_id || null,
       note || null,
+      linked_fixed_id || null,
       id,
     ]);
 
@@ -588,6 +593,73 @@ export const getFixedExpenses = async (req: Request, res: Response) => {
     const result = await pool.query(selectQuery, [month]);
     res.status(200).json({ fixedExpenses: result.rows });
   } catch (error) {
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+// NEW: Copy all fixed expenses from the previous month to current month
+export const copyPreviousFixedExpenses = async (
+  req: Request,
+  res: Response,
+) => {
+  try {
+    const targetMonth = getMonthFilter(req); // e.g. "2026-08"
+
+    const [yearStr, monthStr] = targetMonth.split("-");
+    let year = Number(yearStr || 0);
+    let month = Number(monthStr || 0);
+
+    // Calculate previous month
+    month--;
+    if (month < 1) {
+      month = 12;
+      year--;
+    }
+    const previousMonth = `${year}-${month.toString().padStart(2, "0")}`;
+
+    // 1. Fetch previous month's fixed expenses
+    const selectQuery = `
+      SELECT merchant, location, card_type, amount 
+      FROM transactions 
+      WHERE type = 'EXPENSE' AND is_base = true AND billing_month = $1;
+    `;
+    const previousResult = await pool.query(selectQuery, [previousMonth]);
+
+    if (previousResult.rows.length === 0) {
+      return res
+        .status(404)
+        .json({ error: "No fixed expenses found in previous month." });
+    }
+
+    // 2. Insert into current target month with 1st day of target month as date
+    const insertQuery = `
+      INSERT INTO transactions (merchant, location, date, card_type, auth_code, amount, is_third_party, type, is_base, billing_month)
+      VALUES ($1, $2, $3, $4, $5, $6, false, 'EXPENSE', true, $7)
+    `;
+
+    const defaultDate = `${targetMonth}-01T12:00:00Z`;
+
+    for (const exp of previousResult.rows) {
+      const authCode = `FIX-${Math.floor(Math.random() * 1000000)}`;
+      await pool.query(insertQuery, [
+        exp.merchant,
+        exp.location || "Auto-Pay",
+        defaultDate,
+        exp.card_type || "DIRECT",
+        authCode,
+        exp.amount,
+        targetMonth,
+      ]);
+    }
+
+    broadcast("transaction_updated", {});
+
+    res.status(201).json({
+      message: `Copied ${previousResult.rows.length} fixed expenses successfully!`,
+      count: previousResult.rows.length,
+    });
+  } catch (error) {
+    console.error("Error copying fixed expenses:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

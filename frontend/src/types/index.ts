@@ -20,6 +20,8 @@ export interface Transaction {
   note?: string;
   is_tasa_cero?: boolean;
   parent_id?: string;
+  linked_fixed_id?: string;
+  linked_fixed_name?: string;
 }
 
 export interface ChartData {

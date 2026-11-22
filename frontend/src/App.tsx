@@ -45,9 +45,10 @@ function App() {
   const [isEditingMerchant, setIsEditingMerchant] = useState<boolean>(false);
   const [isEditingNote, setIsEditingNote] = useState<boolean>(false);
   const [editTxCategory, setEditTxCategory] = useState<
-    "PERSONAL" | "FIXED" | "THIRD_PARTY"
+    "PERSONAL" | "FIXED" | "THIRD_PARTY" | "LINKED_FIXED"
   >("PERSONAL");
   const [editTxPersonId, setEditTxPersonId] = useState<string>("");
+  const [editTxLinkedFixedId, setEditTxLinkedFixedId] = useState<string>("");
   const [isSplitAction, setIsSplitAction] = useState<boolean>(false);
   const [splitAmount, setSplitAmount] = useState<string>("");
 
@@ -309,6 +310,33 @@ function App() {
     fetchFixedExpenses();
   };
 
+  const handleCopyPreviousFixed = () => {
+    requestConfirm(
+      "Copy Fixed Expenses",
+      "Do you want to copy all fixed expenses from the previous month into this month?",
+      () => {
+        fetchWithAuth(
+          `/api/transactions/fixed-expenses/copy-previous?month=${selectedMonthRef.current}`,
+          { method: "POST" },
+        )
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.error) alert(data.error);
+            else {
+              fetchFixedExpenses();
+              fetchSummary();
+            }
+            closeConfirm();
+          })
+          .catch((err) => {
+            console.error("Error copying fixed expenses:", err);
+            closeConfirm();
+          });
+      },
+      "Copy",
+    );
+  };
+
   const fetchThirdParties = () => {
     fetchWithAuth(`/api/third-parties`)
       .then((res) => res.json())
@@ -505,6 +533,10 @@ function App() {
       alert("Please select a person.");
       return;
     }
+    if (editTxCategory === "LINKED_FIXED" && !editTxLinkedFixedId) {
+      alert("Please select a fixed expense to cover.");
+      return;
+    }
 
     if (isSplitAction) {
       const splitNum = Number(splitAmount);
@@ -523,7 +555,8 @@ function App() {
         is_third_party: editTxCategory === "THIRD_PARTY",
         third_party_id:
           editTxCategory === "THIRD_PARTY" ? editTxPersonId : null,
-        // Send our new split instructions
+        linked_fixed_id:
+          editTxCategory === "LINKED_FIXED" ? editTxLinkedFixedId : null,
         is_split_action: isSplitAction,
         split_amount: splitAmount,
         is_tasa_cero_action: isTasaCeroAction,
@@ -714,13 +747,17 @@ function App() {
     ? editTxMerchant.trim() !== selectedTx.merchant ||
       editTxNote.trim() !== (selectedTx.note || "") ||
       editTxCategory !==
-        (selectedTx.is_third_party
-          ? "THIRD_PARTY"
-          : selectedTx.is_base
-            ? "FIXED"
-            : "PERSONAL") ||
+        (selectedTx.linked_fixed_id
+          ? "LINKED_FIXED"
+          : selectedTx.is_third_party
+            ? "THIRD_PARTY"
+            : selectedTx.is_base
+              ? "FIXED"
+              : "PERSONAL") ||
       (editTxCategory === "THIRD_PARTY" &&
         editTxPersonId !== (selectedTx.third_party_id || "")) ||
+      (editTxCategory === "LINKED_FIXED" &&
+        editTxLinkedFixedId !== (selectedTx.linked_fixed_id || "")) ||
       isSplitAction ||
       isTasaCeroAction
     : false;
@@ -1189,15 +1226,23 @@ function App() {
                     setSplitAmount("");
                     setIsTasaCeroAction(false);
                     setTasaCeroMonths("3");
-                    if (tx.is_third_party) {
+
+                    if (tx.linked_fixed_id) {
+                      setEditTxCategory("LINKED_FIXED");
+                      setEditTxLinkedFixedId(tx.linked_fixed_id);
+                      setEditTxPersonId("");
+                    } else if (tx.is_third_party) {
                       setEditTxCategory("THIRD_PARTY");
                       setEditTxPersonId(tx.third_party_id || "");
+                      setEditTxLinkedFixedId("");
                     } else if (tx.is_base) {
                       setEditTxCategory("FIXED");
                       setEditTxPersonId("");
+                      setEditTxLinkedFixedId("");
                     } else {
                       setEditTxCategory("PERSONAL");
                       setEditTxPersonId("");
+                      setEditTxLinkedFixedId("");
                     }
                     setEditModalOpen(true);
                   }}
@@ -1242,11 +1287,11 @@ function App() {
                     </div>
                   </div>
 
-                  {/* 4. Amount */}
+                  {/* 4. Amount & Badges */}
                   <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
                     <span
                       className={`text-lg font-extrabold whitespace-nowrap ${
-                        tx.is_tasa_cero
+                        tx.is_tasa_cero || tx.linked_fixed_id
                           ? "text-gray-400 dark:text-gray-600 line-through"
                           : tx.is_third_party
                             ? "text-orange-600 dark:text-orange-400"
@@ -1255,9 +1300,21 @@ function App() {
                     >
                       - ₡{formatCurrency(Number(tx.amount))}
                     </span>
+
+                    {/* BADGE: Third Party */}
                     {tx.is_third_party && (
                       <span className="text-[9px] font-bold text-orange-500 uppercase tracking-wider bg-orange-50 dark:bg-orange-900/30 px-2 py-0.5 rounded">
                         FOR: {tx.third_party_name}
+                      </span>
+                    )}
+
+                    {/* NEW BADGE: Linked Fixed Expense */}
+                    {tx.linked_fixed_id && (
+                      <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded flex items-center gap-1 border border-emerald-200 dark:border-emerald-800">
+                        <span className="material-symbols-outlined !text-[12px]">
+                          link
+                        </span>
+                        FIXED: {tx.linked_fixed_name || "Covered"}
                       </span>
                     )}
                   </div>
@@ -1573,20 +1630,23 @@ function App() {
                           Personal (Variable)
                         </span>
                       </label>
+
+                      {/* NEW OPTION: LINKED FIXED EXPENSE */}
                       <label
-                        className={`flex items-center gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${editTxCategory === "FIXED" ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
+                        className={`flex items-center gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${editTxCategory === "LINKED_FIXED" ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-500" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
                       >
                         <input
                           type="radio"
                           name="tx_category"
-                          checked={editTxCategory === "FIXED"}
-                          onChange={() => setEditTxCategory("FIXED")}
-                          className="w-4 h-4 text-indigo-600"
+                          checked={editTxCategory === "LINKED_FIXED"}
+                          onChange={() => setEditTxCategory("LINKED_FIXED")}
+                          className="w-4 h-4 text-emerald-600"
                         />
                         <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                          Fixed Expense (Bills, etc)
+                          Cover an existing Fixed Expense (No duplication)
                         </span>
                       </label>
+
                       <label
                         className={`flex items-center gap-3 cursor-pointer p-3 border rounded-lg transition-colors ${editTxCategory === "THIRD_PARTY" ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-500" : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"}`}
                       >
@@ -1603,6 +1663,38 @@ function App() {
                       </label>
                     </div>
                   </div>
+
+                  {/* SELECTOR FOR LINKED FIXED EXPENSE */}
+                  {editTxCategory === "LINKED_FIXED" && (
+                    <div className="animate-fade-in">
+                      <label className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mb-1.5 block uppercase tracking-wider">
+                        Select Fixed Expense
+                      </label>
+                      <select
+                        value={editTxLinkedFixedId}
+                        onChange={(e) => setEditTxLinkedFixedId(e.target.value)}
+                        className="border border-emerald-300 dark:border-emerald-700/50 rounded-lg px-4 py-2.5 text-sm w-full outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 bg-emerald-50 dark:bg-emerald-950/20 text-gray-800 dark:text-white font-medium transition-all"
+                      >
+                        <option value="" disabled className="dark:bg-gray-800">
+                          -- Choose a fixed expense --
+                        </option>
+                        {fixedExpensesList.map((f) => (
+                          <option
+                            key={f.id}
+                            value={f.id}
+                            className="dark:bg-gray-800"
+                          >
+                            {f.merchant} (₡{formatCurrency(Number(f.amount))})
+                          </option>
+                        ))}
+                      </select>
+                      {fixedExpensesList.length === 0 && (
+                        <p className="text-xs font-bold text-red-500 mt-2">
+                          No fixed expenses registered for this month.
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {/* THIRD PARTY SELECT & SPLIT */}
                   {editTxCategory === "THIRD_PARTY" && (
@@ -1944,9 +2036,21 @@ function App() {
               </div>
             </div>
             <div className="p-5 overflow-y-auto flex-1">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
-                Registered Fixed Expenses
-              </h3>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  Registered Fixed Expenses
+                </h3>
+                <button
+                  onClick={handleCopyPreviousFixed}
+                  className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 flex items-center gap-1 bg-indigo-50 dark:bg-indigo-900/30 px-2.5 py-1 rounded-md transition-colors"
+                  title="Copy fixed expenses from previous month"
+                >
+                  <span className="material-symbols-outlined !text-[14px]">
+                    content_copy
+                  </span>
+                  Copy from Prev Month
+                </button>
+              </div>
               <ul className="divide-y divide-gray-100 dark:divide-gray-800">
                 {fixedExpensesList.map((exp) => (
                   <li
