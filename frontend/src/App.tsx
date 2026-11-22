@@ -1203,7 +1203,7 @@ function App() {
                   }}
                   className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors flex justify-between items-center cursor-pointer group"
                 >
-                  <div className="flex items-center gap-4 min-w-0 py-1CAte">
+                  <div className="flex items-center gap-4 min-w-0 py-1">
                     {/* 1. Emoji Icon */}
                     <div className="w-12 h-12 shrink-0 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-2xl shadow-sm border border-gray-200 dark:border-gray-700 group-hover:scale-105 transition-transform">
                       {getCategoryEmoji(tx.merchant)}
